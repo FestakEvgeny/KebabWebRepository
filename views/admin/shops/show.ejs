@@ -1,0 +1,116 @@
+<%- include('../partials/header', { title: title }) %>
+
+<div class="page-head">
+  <h1><%= shop.name %></h1>
+  <div class="action-row">
+    <a class="btn" href="/admin/shops/<%= shop.id %>/edit">Edit</a>
+    <% if (shop.isValidated) { %>
+      <form method="post" action="/admin/shops/<%= shop.id %>/unvalidate">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button type="submit" class="btn">Unvalidate</button>
+      </form>
+    <% } else { %>
+      <form method="post" action="/admin/shops/<%= shop.id %>/validate">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button type="submit" class="btn btn-success">Validate shop</button>
+      </form>
+    <% } %>
+    <a class="btn" href="/admin/ratings/new?shopId=<%= shop.id %>">+ Add rating</a>
+    <form method="post" action="/admin/shops/<%= shop.id %>/delete" data-confirm="Delete this shop and all of its ratings?">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <button type="submit" class="btn btn-danger">Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="detail-grid">
+  <div class="card">
+    <h2>Details</h2>
+    <dl class="details">
+      <dt>ID</dt><dd class="mono"><%= shop.id %></dd>
+      <dt>Status</dt>
+      <dd>
+        <% if (shop.isValidated) { %><span class="badge badge-validated">Validated</span>
+        <% } else { %><span class="badge badge-pending">Pending</span><% } %>
+      </dd>
+      <dt>Geo</dt><dd><%= helpers.fixed(shop.geo.latitude, 5) %>, <%= helpers.fixed(shop.geo.longitude, 5) %></dd>
+      <dt>Rating</dt>
+      <dd>
+        <% if (shop.rating === null) { %>-<% } else { %><%= helpers.fixed(shop.rating) %> from <%= shop.countOfRates ?? 0 %> validated rating(s)<% } %>
+      </dd>
+      <dt>Created</dt><dd><%= helpers.formatDate(shop.createdAt) %></dd>
+      <dt>Updated</dt><dd><%= helpers.formatDate(shop.updatedAt) %></dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h2>Photo</h2>
+    <% if (shop.hasPhoto) { %>
+      <img class="photo-preview" src="<%= shop.photoUrl %>" alt="Shop photo">
+    <% } else { %>
+      <p class="muted">No photo uploaded.</p>
+    <% } %>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2>Ratings (<%= shopRatings.length %>)</h2>
+    <a class="btn btn-ghost" href="/admin/ratings?shopId=<%= shop.id %>">Manage in ratings view</a>
+  </div>
+  <% if (shopRatings.length === 0) { %>
+    <p class="muted empty-state">No ratings yet.</p>
+  <% } else { %>
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Food</th><th>Price</th><th>Interior</th><th>Overall</th>
+        <th>Notes</th><th>Status</th><th>Created</th><th class="actions-col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% shopRatings.forEach(function (rating) { %>
+      <tr>
+        <td><%= rating.foodQualityRating %></td>
+        <td><%= rating.priceFairRating %></td>
+        <td><%= rating.interiorRating %></td>
+        <td><%= helpers.fixed(rating.overallRating) %></td>
+        <td class="muted"><%= helpers.truncate(rating.notes, 40) || '-' %></td>
+        <td>
+          <% if (rating.isValidated) { %><span class="badge badge-validated">Validated</span>
+          <% } else { %><span class="badge badge-pending">Pending</span><% } %>
+        </td>
+        <td class="muted"><%= helpers.formatDate(rating.createdAt) %></td>
+        <td class="actions-col">
+          <div class="action-row">
+            <a class="btn btn-sm" href="/admin/ratings/<%= rating.id %>/edit">Edit</a>
+            <% if (rating.isValidated) { %>
+              <form method="post" action="/admin/ratings/<%= rating.id %>/unvalidate">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <input type="hidden" name="redirectTo" value="/admin/shops/<%= shop.id %>">
+                <button type="submit" class="btn btn-sm">Unvalidate</button>
+              </form>
+            <% } else { %>
+              <form method="post" action="/admin/ratings/<%= rating.id %>/validate">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <input type="hidden" name="redirectTo" value="/admin/shops/<%= shop.id %>">
+                <button type="submit" class="btn btn-success btn-sm">Validate</button>
+              </form>
+            <% } %>
+            <form method="post" action="/admin/ratings/<%= rating.id %>/delete" data-confirm="Delete this rating?">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <input type="hidden" name="redirectTo" value="/admin/shops/<%= shop.id %>">
+              <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+  <% } %>
+</div>
+
+<%- include('../partials/footer') %>

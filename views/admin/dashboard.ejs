@@ -1,0 +1,69 @@
+<%- include('partials/header', { title: title }) %>
+
+<div class="page-head">
+  <h1>Dashboard</h1>
+</div>
+
+<div class="stat-grid">
+  <a class="stat-card" href="/admin/shops">
+    <span class="stat-value"><%= stats.totalShops %></span>
+    <span class="stat-label">Shops total</span>
+  </a>
+  <a class="stat-card stat-warn" href="/admin/shops?status=pending">
+    <span class="stat-value"><%= stats.pendingShops %></span>
+    <span class="stat-label">Shops pending</span>
+  </a>
+  <a class="stat-card" href="/admin/ratings">
+    <span class="stat-value"><%= stats.totalRatings %></span>
+    <span class="stat-label">Ratings total</span>
+  </a>
+  <a class="stat-card stat-warn" href="/admin/ratings?status=pending">
+    <span class="stat-value"><%= stats.pendingRatings %></span>
+    <span class="stat-label">Ratings pending</span>
+  </a>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2>Latest pending ratings</h2>
+    <a class="btn btn-ghost" href="/admin/ratings?status=pending">View all</a>
+  </div>
+  <% if (pendingRatings.length === 0) { %>
+    <p class="muted">Nothing pending. Great job!</p>
+  <% } else { %>
+  <table>
+    <thead>
+      <tr>
+        <th>Shop</th>
+        <th>Food</th>
+        <th>Price</th>
+        <th>Interior</th>
+        <th>Notes</th>
+        <th>Submitted</th>
+        <th class="actions-col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% pendingRatings.forEach(function (rating) { %>
+      <tr>
+        <td><%= rating.shopName ?? rating.shopId %></td>
+        <td><%= rating.foodQualityRating %></td>
+        <td><%= rating.priceFairRating %></td>
+        <td><%= rating.interiorRating %></td>
+        <td class="muted"><%= helpers.truncate(rating.notes, 40) || '-' %></td>
+        <td class="muted"><%= helpers.formatDate(rating.createdAt) %></td>
+        <td class="actions-col">
+          <form method="post" action="/admin/ratings/<%= rating.id %>/validate">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="redirectTo" value="/admin">
+            <button type="submit" class="btn btn-success btn-sm">Validate</button>
+          </form>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+
+<%- include('partials/footer') %>

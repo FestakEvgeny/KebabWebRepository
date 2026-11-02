@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= title %> · Kebab Guide Admin</title>
+  <link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+<% if (typeof loggedIn !== 'undefined' && loggedIn) { %>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/admin">Kebab Guide <span>Admin</span></a>
+    <nav class="nav">
+      <a href="/admin" class="<%= active === 'dashboard' ? 'active' : '' %>">Dashboard</a>
+      <a href="/admin/shops" class="<%= active === 'shops' ? 'active' : '' %>">Shops</a>
+      <a href="/admin/ratings" class="<%= active === 'ratings' ? 'active' : '' %>">Ratings</a>
+      <form method="post" action="/admin/logout" class="inline-form">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button type="submit" class="btn btn-ghost">Log out</button>
+      </form>
+    </nav>
+  </div>
+</header>
+<% } %>
+<main class="container">
+  <% if (typeof flash !== 'undefined' && flash) { %>
+    <div class="flash flash-<%= flash.type %>"><%= flash.message %></div>
+  <% } %>

@@ -1,0 +1,98 @@
+<%- include('../partials/header', { title: title }) %>
+
+<div class="page-head">
+  <h1>Shops</h1>
+  <a class="btn btn-primary" href="/admin/shops/new">+ New shop</a>
+</div>
+
+<div class="toolbar">
+  <div class="chips">
+    <a class="chip <%= status === 'all' ? 'chip-active' : '' %>" href="/admin/shops">All</a>
+    <a class="chip <%= status === 'pending' ? 'chip-active' : '' %>" href="/admin/shops?status=pending">Pending</a>
+    <a class="chip <%= status === 'validated' ? 'chip-active' : '' %>" href="/admin/shops?status=validated">Validated</a>
+  </div>
+  <form method="get" action="/admin/shops" class="search-form">
+    <% if (status !== 'all') { %><input type="hidden" name="status" value="<%= status %>"><% } %>
+    <input type="search" name="q" value="<%= search ?? '' %>" placeholder="Search by name...">
+    <button type="submit" class="btn">Search</button>
+  </form>
+</div>
+
+<div class="card">
+  <% if (shops.length === 0) { %>
+    <p class="muted empty-state">No shops found.</p>
+  <% } else { %>
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th></th>
+        <th>Name</th>
+        <th>Geo</th>
+        <th>Rating</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th class="actions-col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% shops.forEach(function (shop) { %>
+      <tr>
+        <td>
+          <% if (shop.hasPhoto) { %>
+            <img class="thumb" src="<%= shop.photoUrl %>" alt="" loading="lazy">
+          <% } else { %>
+            <div class="thumb thumb-empty"></div>
+          <% } %>
+        </td>
+        <td><a href="/admin/shops/<%= shop.id %>"><%= shop.name %></a></td>
+        <td class="muted"><%= helpers.fixed(shop.geo.latitude, 4) %>, <%= helpers.fixed(shop.geo.longitude, 4) %></td>
+        <td><% if (shop.rating === null) { %><span class="muted">-</span><% } else { %><%= helpers.fixed(shop.rating) %> <span class="muted">(<%= shop.countOfRates ?? 0 %>)</span><% } %></td>
+        <td>
+          <% if (shop.isValidated) { %>
+            <span class="badge badge-validated">Validated</span>
+          <% } else { %>
+            <span class="badge badge-pending">Pending</span>
+          <% } %>
+        </td>
+        <td class="muted"><%= helpers.formatDate(shop.createdAt) %></td>
+        <td class="actions-col">
+          <div class="action-row">
+            <a class="btn btn-sm" href="/admin/shops/<%= shop.id %>/edit">Edit</a>
+            <% if (shop.isValidated) { %>
+              <form method="post" action="/admin/shops/<%= shop.id %>/unvalidate">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <input type="hidden" name="redirectTo" value="/admin/shops<%= status !== 'all' ? '?status=' + status : '' %>">
+                <button type="submit" class="btn btn-sm">Unvalidate</button>
+              </form>
+            <% } else { %>
+              <form method="post" action="/admin/shops/<%= shop.id %>/validate">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <input type="hidden" name="redirectTo" value="/admin/shops<%= status !== 'all' ? '?status=' + status : '' %>">
+                <button type="submit" class="btn btn-success btn-sm">Validate</button>
+              </form>
+            <% } %>
+            <form method="post" action="/admin/shops/<%= shop.id %>/delete" data-confirm="Delete this shop and all of its ratings?">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <input type="hidden" name="redirectTo" value="/admin/shops">
+              <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+  <% } %>
+</div>
+
+<% if (typeof pagination !== 'undefined' && pagination && pagination.totalPages > 1) { %>
+<div class="pagination">
+  <% if (pagination.prevUrl) { %><a class="btn btn-sm" href="<%= pagination.prevUrl %>">&larr; Previous</a><% } %>
+  <span class="muted">Page <%= pagination.page %> of <%= pagination.totalPages %> (<%= pagination.total %> total)</span>
+  <% if (pagination.nextUrl) { %><a class="btn btn-sm" href="<%= pagination.nextUrl %>">Next &rarr;</a><% } %>
+</div>
+<% } %>
+
+<%- include('../partials/footer') %>

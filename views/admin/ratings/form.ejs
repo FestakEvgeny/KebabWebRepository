@@ -1,0 +1,87 @@
+<%- include('../partials/header', { title: title }) %>
+
+<div class="page-head">
+  <h1><%= title %></h1>
+  <a class="btn" href="/admin/ratings">Back to ratings</a>
+</div>
+
+<div class="card">
+  <% if (errors && errors.length) { %>
+    <div class="flash flash-error">
+      <ul class="error-list">
+        <% errors.forEach(function (error) { %><li><%= error %></li><% }) %>
+      </ul>
+    </div>
+  <% } %>
+
+  <form method="post" action="<%= action %>" enctype="multipart/form-data" class="form-grid">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+    <% if (rating) { %>
+      <div class="form-field form-field-wide">
+        <label>Shop</label>
+        <div><a href="/admin/shops/<%= rating.shopId %>"><%= shopName ?? rating.shopId %></a></div>
+      </div>
+    <% } else { %>
+      <div class="form-field form-field-wide">
+        <label for="shopId">Shop *</label>
+        <select id="shopId" name="shopId" required>
+          <option value="" disabled <%= preselectedShopId ? '' : 'selected' %>>Choose a shop...</option>
+          <% shopOptions.forEach(function (shop) { %>
+            <option value="<%= shop.id %>" <%= preselectedShopId === shop.id ? 'selected' : '' %>><%= shop.name %></option>
+          <% }) %>
+        </select>
+      </div>
+    <% } %>
+
+    <% ['foodQualityRating', 'priceFairRating', 'interiorRating'].forEach(function (field) {
+         var label = field === 'foodQualityRating' ? 'Food quality' : (field === 'priceFairRating' ? 'Price fairness' : 'Interior');
+         var current = values?.[field] ?? rating?.[field];
+    %>
+      <div class="form-field">
+        <label for="<%= field %>"><%= label %> * <span class="hint">(1-5)</span></label>
+        <select id="<%= field %>" name="<%= field %>" required>
+          <option value="">Choose...</option>
+          <% [1,2,3,4,5].forEach(function (score) { %>
+            <option value="<%= score %>" <%= String(current) === String(score) ? 'selected' : '' %>><%= score %></option>
+          <% }) %>
+        </select>
+      </div>
+    <% }) %>
+
+    <div class="form-field form-field-wide">
+      <label for="notes">Notes</label>
+      <textarea id="notes" name="notes" rows="4" maxlength="2000"
+                placeholder="Optional remarks from the customer..."><%= values?.notes ?? rating?.notes ?? '' %></textarea>
+    </div>
+
+    <div class="form-field form-field-wide">
+      <label for="photo">Photo <span class="hint">(image, max 5 MB)</span></label>
+      <input id="photo" name="photo" type="file" accept="image/*">
+      <% if (rating && rating.hasPhoto) { %>
+        <div class="photo-row">
+          <img class="thumb thumb-lg" src="/api/v1/ratings/<%= rating.id %>/photo" alt="Current photo">
+          <label class="checkbox-label">
+            <input type="checkbox" name="removePhoto"> Remove current photo
+          </label>
+        </div>
+      <% } %>
+    </div>
+
+    <div class="form-field form-field-wide">
+      <label class="checkbox-label">
+        <input type="checkbox" name="isValidated"
+          <% if (values?.isValidated === true || values?.isValidated === 'on' || values?.isValidated === 'true' || rating?.isValidated === true) { %>checked<% } %>>
+        Validated (counts toward the shop's average rating)
+      </label>
+      <p class="hint">Ratings submitted through the public API always start as pending.</p>
+    </div>
+
+    <div class="form-actions form-field-wide">
+      <button type="submit" class="btn btn-primary"><%= submitLabel %></button>
+      <a class="btn" href="/admin/ratings">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<%- include('../partials/footer') %>
