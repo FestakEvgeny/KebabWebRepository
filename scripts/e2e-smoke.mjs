@@ -210,6 +210,82 @@ async function main() {
     check('POST rating for a missing shop returns 404', missingShop.status === 404);
   }
 
+  console.log('\nMobile app API');
+  let mobileShopId;
+  {
+    const allShops = await request('/mobileapp/v1/allShops');
+    const allBody = await readJson(allShops);
+    check(
+      'GET /mobileapp/v1/allShops returns all shops, no pagination, no isValidated',
+      allShops.status === 200 &&
+        Array.isArray(allBody.data) &&
+        allBody.pagination === undefined &&
+        allBody.data.some((shop) => shop.id === plainShopId) &&
+        allBody.data.every((shop) => !('isValidated' in shop)),
+    );
+
+    const add = await request('/mobileapp/v1/shop/add', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'E2E Mobile Shop',
+        latitude: 52.54,
+        longitude: 13.43,
+        isValidated: true,
+      }),
+    });
+    const addBody = await readJson(add);
+    mobileShopId = addBody?.data?.id;
+    check(
+      'POST /mobileapp/v1/shop/add returns 201 and ignores the isValidated field',
+      add.status === 201 && typeof mobileShopId === 'string' && !('isValidated' in addBody.data),
+    );
+
+    const storedShop = await readJson(await request(`/api/v1/shops/${mobileShopId}`));
+    check(
+      'shop created via mobile app is stored pending (is_validated = false)',
+      storedShop.data.isValidated === false,
+    );
+
+    const missingShop = await request('/mobileapp/v1/shop/addRating', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        shopId: '00000000-0000-4000-8000-000000000000',
+        foodQualityRating: 5,
+        priceFairRating: 4,
+        interiorRating: 3,
+      }),
+    });
+    check('mobile addRating for a missing shop returns 404', missingShop.status === 404);
+
+    const addRating = await request('/mobileapp/v1/shop/addRating', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        shopId: mobileShopId,
+        foodQualityRating: 5,
+        priceFairRating: 4,
+        interiorRating: 3,
+        isValidated: true,
+      }),
+    });
+    const ratingBody = await readJson(addRating);
+    const mobileRatingId = ratingBody?.data?.id;
+    check(
+      'POST /mobileapp/v1/shop/addRating returns 201 and ignores the isValidated field',
+      addRating.status === 201 &&
+        typeof mobileRatingId === 'string' &&
+        !('isValidated' in ratingBody.data),
+    );
+
+    const storedRating = await readJson(await request(`/api/v1/ratings/${mobileRatingId}`));
+    check(
+      'rating created via mobile app is stored pending (is_validated = false)',
+      storedRating.data.isValidated === false,
+    );
+  }
+
   // ---------- Admin panel ----------
   console.log('\nAdmin panel');
   let csrfToken;

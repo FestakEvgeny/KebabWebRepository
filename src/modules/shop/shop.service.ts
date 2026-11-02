@@ -97,6 +97,15 @@ export class ShopService {
     return this.repo.save(shop);
   }
 
+  /** Every shop in one response, no pagination (mobile app); photo blobs excluded. */
+  async listAll(): Promise<Shop[]> {
+    return this.repo
+      .createQueryBuilder('shop')
+      .select(SHOP_LIST_COLUMNS)
+      .orderBy('shop.createdAt', 'DESC')
+      .getMany();
+  }
+
   async getById(id: string): Promise<Shop> {
     const shop = await this.repo.findOneBy({ id });
     if (!shop) throw AppError.notFound(`Shop with id "${id}" was not found.`);

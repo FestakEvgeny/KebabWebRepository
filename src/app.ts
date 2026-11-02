@@ -11,6 +11,7 @@ import { env, isDevelopment } from './config/env';
 import { createApiV1Router } from './api/v1.router';
 import { createHealthRouter } from './modules/health/health.routes';
 import { createAdminRouter } from './admin/admin.routes';
+import { createMobileAppRouter } from './modules/mobileapp/mobileapp.routes';
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
 
 export function createApp(dataSource: DataSource): Express {
@@ -83,6 +84,7 @@ export function createApp(dataSource: DataSource): Express {
 
   app.use('/health', createHealthRouter(dataSource));
   app.use('/api/v1', createApiV1Router(dataSource));
+  app.use('/mobileapp/v1', createMobileAppRouter(dataSource));
   app.use('/admin', createAdminRouter(dataSource));
 
   app.use(notFoundHandler);
