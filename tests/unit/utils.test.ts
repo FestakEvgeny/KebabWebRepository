@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePagination } from '../../src/utils/parse-pagination';
+import { parsePagination } from '../../src/utils/pagination/parse-pagination';
 import { safeEqual, randomToken } from '../../src/utils/math/crypto';
 import { isAllowedImageMime } from '../../src/middleware/upload';
 import { isUuid } from '../../src/utils/string/uuid';

@@ -9,8 +9,8 @@ import { toShopResponse } from './shop.mapper';
 import { UploadedPhoto } from '../../utils/photo/uploaded-photo';
 import { PhotoUpdate } from '../../utils/photo/photo-update';
 import { AppError } from '../../utils/error/app-error';
-import { parsePagination } from '../../utils/parse-pagination';
-import { paginationMeta } from '../../utils/pagination-meta';
+import { parsePagination } from '../../utils/pagination/parse-pagination';
+import { paginationMeta } from '../../utils/pagination/pagination-meta';
 import { round2 } from '../../utils/math/math';
 import { escapeLike } from '../../utils/string/escape-like';
 
