@@ -1,12 +1,12 @@
 import { Request, Response, Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler';
 import { optionalPhotoUpload } from '../../middleware/upload';
-import { toUploadedPhoto } from '../../utils/uploaded-photo';
+import { toUploadedPhoto } from '../../utils/photo/uploaded-photo';
 import { apiWriteLimiter } from '../../middleware/rate-limit';
 import { parseAndValidate } from '../../middleware/validate';
-import { AppError } from '../../utils/app-error';
-import { requireUuid } from '../../utils/uuid';
-import { sendPhoto } from '../../utils/send-photo';
+import { AppError } from '../../utils/error/app-error';
+import { requireUuid } from '../../utils/string/uuid';
+import { sendPhoto } from '../../utils/photo/send-photo';
 import { CreateRatingRequest } from './dto/create-rating-request.dto';
 import { ListRatingsQuery } from './dto/list-ratings-query.dto';
 import { RatingService } from './rating.service';

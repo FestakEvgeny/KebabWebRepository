@@ -1,9 +1,9 @@
 import { Request, Response, Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler';
 import { optionalPhotoUpload } from '../../middleware/upload';
-import { toUploadedPhoto } from '../../utils/uploaded-photo';
+import { toUploadedPhoto } from '../../utils/photo/uploaded-photo';
 import { parseAndValidate } from '../../middleware/validate';
-import { AppError } from '../../utils/app-error';
+import { AppError } from '../../utils/error/app-error';
 import { CreateShopRequest } from '../shop/dto/create-shop-request.dto';
 import { UpdateShopRequest } from '../shop/dto/update-shop-request.dto';
 import { ShopService } from '../shop/shop.service';

@@ -1,7 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
-import { AppError } from '../utils/app-error';
-import { ErrorDetail } from '../utils/error-detail';
+import { AppError } from '../utils/error/app-error';
+import { ErrorDetail } from '../utils/error/error-detail';
 
 type Constructor<T> = new () => T;
 

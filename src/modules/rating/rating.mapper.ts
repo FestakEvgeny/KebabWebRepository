@@ -1,5 +1,5 @@
 import { Rating } from '../../database/entities/rating.entity';
-import { round2 } from '../../utils/math';
+import { round2 } from '../../utils/math/math';
 import { RatingResponse } from './dto/rating-response.dto';
 
 export function toRatingResponse(rating: Rating, shopName?: string): RatingResponse {

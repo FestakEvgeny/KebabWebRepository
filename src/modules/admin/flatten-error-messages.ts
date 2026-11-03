@@ -1,4 +1,4 @@
-import { ErrorDetail } from '../../utils/error-detail';
+import { ErrorDetail } from '../../utils/error/error-detail';
 
 export function flattenErrorMessages(error: { details?: ErrorDetail[] }): string[] {
   if (error.details && error.details.length > 0) {

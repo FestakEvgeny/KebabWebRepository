@@ -2,7 +2,7 @@ import { Request, Response, Router } from 'express';
 import { DataSource } from 'typeorm';
 import { asyncHandler } from '../../middleware/async-handler';
 import { optionalPhotoUpload } from '../../middleware/upload';
-import { toUploadedPhoto } from '../../utils/uploaded-photo';
+import { toUploadedPhoto } from '../../utils/photo/uploaded-photo';
 import { apiWriteLimiter } from '../../middleware/rate-limit';
 import { parseAndValidate } from '../../middleware/validate';
 import { CreateShopRequest } from '../shop/dto/create-shop-request.dto';

@@ -83,6 +83,18 @@ npm run build && npm start    # production build -> dist/
 - Admin panel: http://localhost:3000/admin
 - Health: http://localhost:3000/health
 
+### 5. if Already running:
+```bash
+npm run build
+npm start  
+```
+Or if doesn't work - just rebuild with 
+netstat -ano | findstr :3000    # note the PID in the last column
+taskkill /F /PID <that_pid>
+
+rerun database:
+npm run db:clean → db:start → migration:run → npm run seed
+
 ## Scripts
 
 | Command                 | Description                                   |

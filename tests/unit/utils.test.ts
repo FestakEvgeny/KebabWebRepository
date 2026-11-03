@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { parsePagination } from '../../src/utils/parse-pagination';
-import { safeEqual, randomToken } from '../../src/utils/crypto';
+import { safeEqual, randomToken } from '../../src/utils/math/crypto';
 import { isAllowedImageMime } from '../../src/middleware/upload';
-import { isUuid } from '../../src/utils/uuid';
+import { isUuid } from '../../src/utils/string/uuid';
 
 describe('parsePagination', () => {
   it('falls back to defaults for missing input', () => {

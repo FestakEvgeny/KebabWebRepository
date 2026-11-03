@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { randomToken, safeEqual } from '../../utils/crypto';
+import { randomToken, safeEqual } from '../../utils/math/crypto';
 import { viewHelpers } from './view-helpers';
 
 export function ensureCsrfToken(req: Request): string {

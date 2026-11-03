@@ -6,13 +6,13 @@ import { ShopListResponse } from './dto/shop-list-response.dto';
 import { ShopListFilters } from './shop-list-filters';
 import { ShopStats } from './shop-stats';
 import { toShopResponse } from './shop.mapper';
-import { UploadedPhoto } from '../../utils/uploaded-photo';
-import { PhotoUpdate } from '../../utils/photo-update';
-import { AppError } from '../../utils/app-error';
+import { UploadedPhoto } from '../../utils/photo/uploaded-photo';
+import { PhotoUpdate } from '../../utils/photo/photo-update';
+import { AppError } from '../../utils/error/app-error';
 import { parsePagination } from '../../utils/parse-pagination';
 import { paginationMeta } from '../../utils/pagination-meta';
-import { round2 } from '../../utils/math';
-import { escapeLike } from '../../utils/escape-like';
+import { round2 } from '../../utils/math/math';
+import { escapeLike } from '../../utils/string/escape-like';
 
 /** Columns loaded for list queries; photo blobs are excluded to keep pages light. */
 const SHOP_LIST_COLUMNS = [

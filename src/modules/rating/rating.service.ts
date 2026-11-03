@@ -8,12 +8,12 @@ import { RatingListResponse } from './dto/rating-list-response.dto';
 import { ListRatingsOptions } from './list-ratings-options';
 import { AdminRatingListFilters } from './admin-rating-list-filters';
 import { toRatingResponse } from './rating.mapper';
-import { UploadedPhoto } from '../../utils/uploaded-photo';
-import { PhotoUpdate } from '../../utils/photo-update';
-import { AppError } from '../../utils/app-error';
+import { UploadedPhoto } from '../../utils/photo/uploaded-photo';
+import { PhotoUpdate } from '../../utils/photo/photo-update';
+import { AppError } from '../../utils/error/app-error';
 import { parsePagination } from '../../utils/parse-pagination';
 import { paginationMeta } from '../../utils/pagination-meta';
-import { escapeLike } from '../../utils/escape-like';
+import { escapeLike } from '../../utils/string/escape-like';
 
 const RATING_LIST_COLUMNS = [
   'rating.id',

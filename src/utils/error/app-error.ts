@@ -1,4 +1,4 @@
-import { ErrorDetail } from './error-detail';
+import { ErrorDetail } from '../error-detail';
 
 export class AppError extends Error {
   public readonly statusCode: number;

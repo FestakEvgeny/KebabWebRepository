@@ -1,7 +1,7 @@
 import { Request, RequestHandler, Response } from 'express';
 import multer from 'multer';
 import { env } from '../config/env';
-import { AppError } from '../utils/app-error';
+import { AppError } from '../utils/error/app-error';
 
 const upload = multer({
   storage: multer.memoryStorage(),
