@@ -10,6 +10,7 @@ import { ShopService } from '../shop/shop.service';
 import { RatingService } from '../rating/rating.service';
 import { MobileAddRatingRequest } from './dto/mobile-add-rating-request.dto';
 import { toMobileShopResponse, toMobileRatingResponse } from './mobileapp.mapper';
+import { toSingleMobileShopResponse } from '../shop/mapper/shop-single-mobile-response-mapper';
 
 /** Assembles the mobile app API: /mobileapp/v1/... */
 export function createMobileAppRouter(dataSource: DataSource): Router {
@@ -50,6 +51,15 @@ export function createMobileAppRouter(dataSource: DataSource): Router {
       res.status(201).json({ data: toMobileRatingResponse(rating) });
     }),
   );
+
+  router.get(
+    '/shop/getSingle',
+    apiWriteLimiter,
+      asyncHandler(async (req: Request, res: Response) => {
+      const shop = await shopService.getById(req.body);
+      res.json({ data: toSingleMobileShopResponse(shop) });
+    }),
+  )
 
   return router;
 }
