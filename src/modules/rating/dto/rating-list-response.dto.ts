@@ -1,4 +1,4 @@
-import { PaginationMeta } from '../../../utils/pagination-meta';
+import { PaginationMeta } from '../../../utils/pagination/pagination-meta';
 import { RatingResponse } from './rating-response.dto';
 
 export interface RatingListResponse {

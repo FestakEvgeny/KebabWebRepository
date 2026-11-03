@@ -1,5 +1,5 @@
 import { Request } from 'express';
-import { PaginationMeta } from '../../utils/pagination-meta';
+import { PaginationMeta } from '../../utils/pagination/pagination-meta';
 
 export interface PaginationVm {
   page: number;

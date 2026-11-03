@@ -11,8 +11,8 @@ import { toRatingResponse } from './rating.mapper';
 import { UploadedPhoto } from '../../utils/photo/uploaded-photo';
 import { PhotoUpdate } from '../../utils/photo/photo-update';
 import { AppError } from '../../utils/error/app-error';
-import { parsePagination } from '../../utils/parse-pagination';
-import { paginationMeta } from '../../utils/pagination-meta';
+import { parsePagination } from '../../utils/pagination/parse-pagination';
+import { paginationMeta } from '../../utils/pagination/pagination-meta';
 import { escapeLike } from '../../utils/string/escape-like';
 
 const RATING_LIST_COLUMNS = [
