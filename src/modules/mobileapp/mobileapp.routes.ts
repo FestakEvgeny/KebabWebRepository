@@ -1,31 +1,15 @@
 import { Request, Response, Router } from 'express';
 import { DataSource } from 'typeorm';
 import { asyncHandler } from '../../middleware/async-handler';
-import { optionalPhotoUpload, toUploadedPhoto } from '../../middleware/upload';
+import { optionalPhotoUpload } from '../../middleware/upload';
+import { toUploadedPhoto } from '../../utils/uploaded-photo';
 import { apiWriteLimiter } from '../../middleware/rate-limit';
 import { parseAndValidate } from '../../middleware/validate';
-import { Shop } from '../../database/entities/shop.entity';
-import { Rating } from '../../database/entities/rating.entity';
-import { CreateShopDto } from '../shop/shop.dto';
-import { ShopResponse, ShopService, toShopResponse } from '../shop/shop.service';
-import { RatingResponse, RatingService, toRatingResponse } from '../rating/rating.service';
-import { MobileAddRatingDto } from './mobileapp.dto';
-
-/** Shop payload for the mobile app: the moderation flag is never exposed. */
-export type MobileShopResponse = Omit<ShopResponse, 'isValidated'>;
-
-/** Rating payload for the mobile app: the moderation flag is never exposed. */
-export type MobileRatingResponse = Omit<RatingResponse, 'isValidated'>;
-
-export function toMobileShopResponse(shop: Shop): MobileShopResponse {
-  const { isValidated: _isValidated, ...rest } = toShopResponse(shop);
-  return rest;
-}
-
-export function toMobileRatingResponse(rating: Rating): MobileRatingResponse {
-  const { isValidated: _isValidated, ...rest } = toRatingResponse(rating);
-  return rest;
-}
+import { CreateShopRequest } from '../shop/dto/create-shop-request.dto';
+import { ShopService } from '../shop/shop.service';
+import { RatingService } from '../rating/rating.service';
+import { MobileAddRatingRequest } from './dto/mobile-add-rating-request.dto';
+import { toMobileShopResponse, toMobileRatingResponse } from './mobileapp.mapper';
 
 /** Assembles the mobile app API: /mobileapp/v1/... */
 export function createMobileAppRouter(dataSource: DataSource): Router {
@@ -49,7 +33,7 @@ export function createMobileAppRouter(dataSource: DataSource): Router {
     apiWriteLimiter,
     optionalPhotoUpload('photo'),
     asyncHandler(async (req: Request, res: Response) => {
-      const dto = await parseAndValidate(CreateShopDto, req.body);
+      const dto = await parseAndValidate(CreateShopRequest, req.body);
       const shop = await shopService.create(dto, toUploadedPhoto(req.file));
       res.status(201).json({ data: toMobileShopResponse(shop) });
     }),
@@ -61,7 +45,7 @@ export function createMobileAppRouter(dataSource: DataSource): Router {
     apiWriteLimiter,
     optionalPhotoUpload('photo'),
     asyncHandler(async (req: Request, res: Response) => {
-      const dto = await parseAndValidate(MobileAddRatingDto, req.body);
+      const dto = await parseAndValidate(MobileAddRatingRequest, req.body);
       const rating = await ratingService.createForShop(dto.shopId, dto, toUploadedPhoto(req.file));
       res.status(201).json({ data: toMobileRatingResponse(rating) });
     }),

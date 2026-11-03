@@ -6,8 +6,8 @@ import { ShopService } from '../../src/modules/shop/shop.service';
 import {
   toMobileRatingResponse,
   toMobileShopResponse,
-} from '../../src/modules/mobileapp/mobileapp.routes';
-import { MobileAddRatingDto } from '../../src/modules/mobileapp/mobileapp.dto';
+} from '../../src/modules/mobileapp/mobileapp.mapper';
+import { MobileAddRatingRequest } from '../../src/modules/mobileapp/dto/mobile-add-rating-request.dto';
 import { parseAndValidate } from '../../src/middleware/validate';
 
 function createFakeDataSource(repo: Record<string, unknown>): DataSource {
@@ -93,12 +93,12 @@ describe('ShopService.listAll', () => {
   });
 });
 
-describe('MobileAddRatingDto', () => {
+describe('MobileAddRatingRequest', () => {
   // class-validator's @IsUUID() only accepts version 1-5 UUIDs.
   const MOBILE_SHOP_ID = '00000000-0000-4000-8000-000000000001';
 
   it('accepts a valid body with a shop id', async () => {
-    const dto = await parseAndValidate(MobileAddRatingDto, {
+    const dto = await parseAndValidate(MobileAddRatingRequest, {
       shopId: MOBILE_SHOP_ID,
       foodQualityRating: 5,
       priceFairRating: 4,
@@ -109,11 +109,11 @@ describe('MobileAddRatingDto', () => {
 
   it('rejects a missing or malformed shop id', async () => {
     await expect(
-      parseAndValidate(MobileAddRatingDto, { foodQualityRating: 5, priceFairRating: 4, interiorRating: 3 }),
+      parseAndValidate(MobileAddRatingRequest, { foodQualityRating: 5, priceFairRating: 4, interiorRating: 3 }),
     ).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
 
     await expect(
-      parseAndValidate(MobileAddRatingDto, {
+      parseAndValidate(MobileAddRatingRequest, {
         shopId: 'not-a-uuid',
         foodQualityRating: 5,
         priceFairRating: 4,
@@ -123,7 +123,7 @@ describe('MobileAddRatingDto', () => {
   });
 
   it('strips a client-supplied isValidated instead of accepting it', async () => {
-    const dto = await parseAndValidate(MobileAddRatingDto, {
+    const dto = await parseAndValidate(MobileAddRatingRequest, {
       shopId: MOBILE_SHOP_ID,
       foodQualityRating: 5,
       priceFairRating: 4,

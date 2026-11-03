@@ -1,6 +1,7 @@
-import { plainToInstance, TransformFnParams } from 'class-transformer';
+import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
-import { AppError, ErrorDetail } from '../utils/http-error';
+import { AppError } from '../utils/app-error';
+import { ErrorDetail } from '../utils/error-detail';
 
 type Constructor<T> = new () => T;
 
@@ -31,16 +32,4 @@ function collectDetails(errors: ValidationError[]): ErrorDetail[] {
     }
   }
   return details;
-}
-
-/** Accepts `true`/`false` from query strings, checkboxes ("on") and JSON. */
-export function booleanTransform({ value }: TransformFnParams): unknown {
-  if (value === undefined || value === null || value === '') return undefined;
-  if (value === true || value === 'true' || value === 1 || value === '1' || value === 'on') {
-    return true;
-  }
-  if (value === false || value === 'false' || value === 0 || value === '0' || value === 'off') {
-    return false;
-  }
-  return value; // let @IsBoolean() reject anything unexpected
 }

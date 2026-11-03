@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { CreateShopDto, ListShopsQueryDto } from '../../src/modules/shop/shop.dto';
-import { CreateRatingDto } from '../../src/modules/rating/rating.dto';
+import { CreateShopRequest } from '../../src/modules/shop/dto/create-shop-request.dto';
+import { ListShopsQuery } from '../../src/modules/shop/dto/list-shops-query.dto';
+import { CreateRatingRequest } from '../../src/modules/rating/dto/create-rating-request.dto';
 import { parseAndValidate } from '../../src/middleware/validate';
 
-describe('CreateShopDto', () => {
+describe('CreateShopRequest', () => {
   it('accepts a valid JSON body', async () => {
-    const dto = await parseAndValidate(CreateShopDto, {
+    const dto = await parseAndValidate(CreateShopRequest, {
       name: 'Kebab King',
       latitude: 52.52,
       longitude: 13.405,
@@ -15,7 +16,7 @@ describe('CreateShopDto', () => {
   });
 
   it('coerces multipart string fields to numbers', async () => {
-    const dto = await parseAndValidate(CreateShopDto, {
+    const dto = await parseAndValidate(CreateShopRequest, {
       name: 'Kebab King',
       latitude: '52.52',
       longitude: '13.405',
@@ -26,20 +27,20 @@ describe('CreateShopDto', () => {
 
   it('rejects out-of-range latitude', async () => {
     await expect(
-      parseAndValidate(CreateShopDto, { name: 'X', latitude: 999, longitude: 0 }),
+      parseAndValidate(CreateShopRequest, { name: 'X', latitude: 999, longitude: 0 }),
     ).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
   });
 
   it('rejects a missing name', async () => {
     await expect(
-      parseAndValidate(CreateShopDto, { latitude: 1, longitude: 1 }),
+      parseAndValidate(CreateShopRequest, { latitude: 1, longitude: 1 }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });
 
-describe('ListShopsQueryDto', () => {
+describe('ListShopsQuery', () => {
   it('parses booleans, numbers and clamps-free raw values from the query string', async () => {
-    const dto = await parseAndValidate(ListShopsQueryDto, {
+    const dto = await parseAndValidate(ListShopsQuery, {
       page: '2',
       limit: '50',
       isValidated: 'true',
@@ -54,14 +55,14 @@ describe('ListShopsQueryDto', () => {
 
   it('rejects garbage boolean values', async () => {
     await expect(
-      parseAndValidate(ListShopsQueryDto, { isValidated: 'yes' }),
+      parseAndValidate(ListShopsQuery, { isValidated: 'yes' }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });
 
-describe('CreateRatingDto', () => {
+describe('CreateRatingRequest', () => {
   it('accepts valid scores', async () => {
-    const dto = await parseAndValidate(CreateRatingDto, {
+    const dto = await parseAndValidate(CreateRatingRequest, {
       foodQualityRating: 5,
       priceFairRating: '4',
       interiorRating: 3,
@@ -73,14 +74,14 @@ describe('CreateRatingDto', () => {
 
   it('rejects a score of 6 and a score of 0', async () => {
     await expect(
-      parseAndValidate(CreateRatingDto, {
+      parseAndValidate(CreateRatingRequest, {
         foodQualityRating: 6,
         priceFairRating: 4,
         interiorRating: 4,
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     await expect(
-      parseAndValidate(CreateRatingDto, {
+      parseAndValidate(CreateRatingRequest, {
         foodQualityRating: 0,
         priceFairRating: 4,
         interiorRating: 4,
@@ -90,7 +91,7 @@ describe('CreateRatingDto', () => {
 
   it('rejects non-integer scores', async () => {
     await expect(
-      parseAndValidate(CreateRatingDto, {
+      parseAndValidate(CreateRatingRequest, {
         foodQualityRating: 4.5,
         priceFairRating: 4,
         interiorRating: 4,

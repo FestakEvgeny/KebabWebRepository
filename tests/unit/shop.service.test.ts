@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DataSource } from 'typeorm';
 import { Shop } from '../../src/database/entities/shop.entity';
-import { ShopService, toShopResponse } from '../../src/modules/shop/shop.service';
-import { CreateShopDto } from '../../src/modules/shop/shop.dto';
+import { ShopService } from '../../src/modules/shop/shop.service';
+import { toShopResponse } from '../../src/modules/shop/shop.mapper';
+import { CreateShopRequest } from '../../src/modules/shop/dto/create-shop-request.dto';
 
 function createFakeRepo(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -26,14 +27,14 @@ function createFakeDataSource(repo: Record<string, unknown>): DataSource {
   } as unknown as DataSource;
 }
 
-const baseDto: CreateShopDto = { name: 'Kebab King', latitude: 52.52, longitude: 13.405 };
+const baseRequest: CreateShopRequest = { name: 'Kebab King', latitude: 52.52, longitude: 13.405 };
 
 describe('ShopService', () => {
   it('creates a shop as pending validation with a trimmed name', async () => {
     const repo = createFakeRepo();
     const service = new ShopService(createFakeDataSource(repo));
 
-    const shop = await service.create({ ...baseDto, name: '  Kebab King  ' });
+    const shop = await service.create({ ...baseRequest, name: '  Kebab King  ' });
 
     expect(shop.isValidated).toBe(false);
     expect(shop.name).toBe('Kebab King');
@@ -47,7 +48,7 @@ describe('ShopService', () => {
     const service = new ShopService(createFakeDataSource(repo));
     const buffer = Buffer.from('fake-image-bytes');
 
-    await service.create(baseDto, { buffer, mimeType: 'image/png', size: buffer.length });
+    await service.create(baseRequest, { buffer, mimeType: 'image/png', size: buffer.length });
 
     expect(repo.save).toHaveBeenCalledWith(
       expect.objectContaining({ photo: buffer, photoMimeType: 'image/png' }),

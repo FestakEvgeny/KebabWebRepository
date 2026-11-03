@@ -1,45 +1,19 @@
 import { DataSource, Repository } from 'typeorm';
 import { Rating } from '../../database/entities/rating.entity';
 import { Shop } from '../../database/entities/shop.entity';
-import { AdminCreateRatingDto, CreateRatingDto, UpdateRatingDto } from './rating.dto';
-import { UploadedPhoto } from '../../middleware/upload';
-import { AppError } from '../../utils/http-error';
-import { parsePagination, paginationMeta, PaginationMeta } from '../../utils/pagination';
-import { escapeLike, PhotoUpdate, round2 } from '../shop/shop.service';
-
-export interface RatingResponse {
-  id: string;
-  shopId: string;
-  shopName?: string;
-  foodQualityRating: number;
-  priceFairRating: number;
-  interiorRating: number;
-  overallRating: number;
-  notes: string | null;
-  hasPhoto: boolean;
-  photoUrl: string | null;
-  isValidated: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface PaginatedRatings {
-  data: RatingResponse[];
-  pagination: PaginationMeta;
-}
-
-export interface ListRatingsOptions {
-  page?: unknown;
-  limit?: unknown;
-  /** Filter by moderation status; omit to return everything. */
-  isValidated?: boolean;
-}
-
-export interface AdminRatingListFilters extends ListRatingsOptions {
-  status?: 'all' | 'pending' | 'validated';
-  shopId?: string;
-  search?: string;
-}
+import { CreateRatingRequest } from './dto/create-rating-request.dto';
+import { AdminCreateRatingRequest } from './dto/admin-create-rating-request.dto';
+import { UpdateRatingRequest } from './dto/update-rating-request.dto';
+import { RatingListResponse } from './dto/rating-list-response.dto';
+import { ListRatingsOptions } from './list-ratings-options';
+import { AdminRatingListFilters } from './admin-rating-list-filters';
+import { toRatingResponse } from './rating.mapper';
+import { UploadedPhoto } from '../../utils/uploaded-photo';
+import { PhotoUpdate } from '../../utils/photo-update';
+import { AppError } from '../../utils/app-error';
+import { parsePagination } from '../../utils/parse-pagination';
+import { paginationMeta } from '../../utils/pagination-meta';
+import { escapeLike } from '../../utils/escape-like';
 
 const RATING_LIST_COLUMNS = [
   'rating.id',
@@ -54,30 +28,7 @@ const RATING_LIST_COLUMNS = [
   'rating.updatedAt',
 ];
 
-export function toRatingResponse(rating: Rating, shopName?: string): RatingResponse {
-  const hasPhoto = Boolean(rating.photo ?? null) || Boolean(rating.photoMimeType ?? null);
-  return {
-    id: rating.id,
-    shopId: rating.shopId,
-    ...(shopName !== undefined ? { shopName } : {}),
-    foodQualityRating: rating.foodQualityRating,
-    priceFairRating: rating.priceFairRating,
-    interiorRating: rating.interiorRating,
-    overallRating: round2(
-      (rating.foodQualityRating + rating.priceFairRating + rating.interiorRating) / 3,
-    ),
-    notes: rating.notes ?? null,
-    hasPhoto,
-    photoUrl: hasPhoto ? `/api/v1/ratings/${rating.id}/photo` : null,
-    isValidated: rating.isValidated,
-    createdAt:
-      rating.createdAt instanceof Date ? rating.createdAt.toISOString() : String(rating.createdAt),
-    updatedAt:
-      rating.updatedAt instanceof Date ? rating.updatedAt.toISOString() : String(rating.updatedAt),
-  };
-}
-
-export function normalizeNotes(notes?: string | null): string | null {
+function normalizeNotes(notes?: string | null): string | null {
   const trimmed = notes?.trim();
   return trimmed ? trimmed : null;
 }
@@ -92,7 +43,7 @@ export class RatingService {
   }
 
   /** Creates a pending rating via the public API (is_validated always false). */
-  async createForShop(shopId: string, dto: CreateRatingDto, photo?: UploadedPhoto): Promise<Rating> {
+  async createForShop(shopId: string, dto: CreateRatingRequest, photo?: UploadedPhoto): Promise<Rating> {
     const shop = await this.shopRepo.findOneBy({ id: shopId });
     if (!shop) throw AppError.notFound(`Shop with id "${shopId}" was not found.`);
 
@@ -108,7 +59,7 @@ export class RatingService {
     return this.repo.save(rating);
   }
 
-  async createAsAdmin(dto: AdminCreateRatingDto, photo?: UploadedPhoto): Promise<Rating> {
+  async createAsAdmin(dto: AdminCreateRatingRequest, photo?: UploadedPhoto): Promise<Rating> {
     const shop = await this.shopRepo.findOneBy({ id: dto.shopId });
     if (!shop) throw AppError.notFound(`Shop with id "${dto.shopId}" was not found.`);
 
@@ -130,7 +81,7 @@ export class RatingService {
     return rating;
   }
 
-  async listByShop(shopId: string, options: ListRatingsOptions): Promise<PaginatedRatings> {
+  async listByShop(shopId: string, options: ListRatingsOptions): Promise<RatingListResponse> {
     const { page, limit, skip } = parsePagination(options);
     const qb = this.repo
       .createQueryBuilder('rating')
@@ -153,7 +104,7 @@ export class RatingService {
     };
   }
 
-  async listAdmin(filters: AdminRatingListFilters): Promise<PaginatedRatings> {
+  async listAdmin(filters: AdminRatingListFilters): Promise<RatingListResponse> {
     const { page, limit, skip } = parsePagination(filters);
     const qb = this.repo
       .createQueryBuilder('rating')
@@ -204,7 +155,7 @@ export class RatingService {
     return { buffer: rating.photo, mimeType: rating.photoMimeType ?? 'application/octet-stream' };
   }
 
-  async update(id: string, dto: UpdateRatingDto, photoUpdate: PhotoUpdate = {}): Promise<Rating> {
+  async update(id: string, dto: UpdateRatingRequest, photoUpdate: PhotoUpdate = {}): Promise<Rating> {
     const rating = await this.getById(id);
     rating.foodQualityRating = dto.foodQualityRating;
     rating.priceFairRating = dto.priceFairRating;

@@ -10,7 +10,7 @@ import { DataSource } from 'typeorm';
 import { env, isDevelopment } from './config/env';
 import { createApiV1Router } from './api/v1.router';
 import { createHealthRouter } from './modules/health/health.routes';
-import { createAdminRouter } from './admin/admin.routes';
+import { createAdminRouter } from './modules/admin/admin.routes';
 import { createMobileAppRouter } from './modules/mobileapp/mobileapp.routes';
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
 
@@ -19,7 +19,7 @@ export function createApp(dataSource: DataSource): Express {
 
   app.disable('x-powered-by');
   app.set('json escape', true);
-  app.set('views', path.resolve(process.cwd(), 'views'));
+  app.set('views', path.resolve(process.cwd(), 'frontend/views'));
   app.set('view engine', 'ejs');
 
   app.use(
@@ -79,7 +79,7 @@ export function createApp(dataSource: DataSource): Express {
     }),
   );
 
-  app.use('/assets', express.static(path.resolve(process.cwd(), 'public'), { maxAge: '1d' }));
+  app.use('/assets', express.static(path.resolve(process.cwd(), 'frontend/public'), { maxAge: '1d' }));
   app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
   app.use('/health', createHealthRouter(dataSource));

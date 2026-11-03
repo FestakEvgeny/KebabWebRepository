@@ -1,13 +1,16 @@
-import { Request, Response } from 'express';
+import { Request, Response, Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler';
-import { optionalPhotoUpload, toUploadedPhoto } from '../../middleware/upload';
+import { optionalPhotoUpload } from '../../middleware/upload';
+import { toUploadedPhoto } from '../../utils/uploaded-photo';
 import { apiWriteLimiter } from '../../middleware/rate-limit';
 import { parseAndValidate } from '../../middleware/validate';
-import { AppError, isUuid } from '../../utils/http-error';
+import { AppError } from '../../utils/app-error';
+import { requireUuid } from '../../utils/uuid';
 import { sendPhoto } from '../../utils/send-photo';
-import { Router } from 'express';
-import { CreateShopDto, ListShopsQueryDto } from './shop.dto';
-import { ShopService, toShopResponse } from './shop.service';
+import { CreateShopRequest } from './dto/create-shop-request.dto';
+import { ListShopsQuery } from './dto/list-shops-query.dto';
+import { ShopService } from './shop.service';
+import { toShopResponse } from './shop.mapper';
 import { RatingController } from '../rating/rating.controller';
 
 export function createShopRouter(shopService: ShopService, ratingController: RatingController): Router {
@@ -18,7 +21,7 @@ export function createShopRouter(shopService: ShopService, ratingController: Rat
     apiWriteLimiter,
     optionalPhotoUpload('photo'),
     asyncHandler(async (req: Request, res: Response) => {
-      const dto = await parseAndValidate(CreateShopDto, req.body);
+      const dto = await parseAndValidate(CreateShopRequest, req.body);
       const shop = await shopService.create(dto, toUploadedPhoto(req.file));
       res.status(201).json({ data: toShopResponse(shop) });
     }),
@@ -27,7 +30,7 @@ export function createShopRouter(shopService: ShopService, ratingController: Rat
   router.get(
     '/',
     asyncHandler(async (req: Request, res: Response) => {
-      const query = await parseAndValidate(ListShopsQueryDto, req.query);
+      const query = await parseAndValidate(ListShopsQuery, req.query);
       res.json(
         await shopService.list({
           page: query.page,
@@ -65,10 +68,4 @@ export function createShopRouter(shopService: ShopService, ratingController: Rat
   router.use('/:shopId/ratings', ratingController.nestedRouter);
 
   return router;
-}
-
-export function requireUuid(value: string, resource: string): void {
-  if (!isUuid(value)) {
-    throw AppError.notFound(`${resource} with id "${value}" was not found.`);
-  }
 }

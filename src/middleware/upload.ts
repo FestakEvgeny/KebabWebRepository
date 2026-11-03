@@ -1,7 +1,7 @@
 import { Request, RequestHandler, Response } from 'express';
 import multer from 'multer';
 import { env } from '../config/env';
-import { AppError } from '../utils/http-error';
+import { AppError } from '../utils/app-error';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -19,19 +19,8 @@ const upload = multer({
   },
 });
 
-export interface UploadedPhoto {
-  buffer: Buffer;
-  mimeType: string;
-  size: number;
-}
-
 export function isAllowedImageMime(mimeType: string): boolean {
   return mimeType.startsWith('image/');
-}
-
-export function toUploadedPhoto(file?: Express.Multer.File): UploadedPhoto | undefined {
-  if (!file) return undefined;
-  return { buffer: file.buffer, mimeType: file.mimetype, size: file.size };
 }
 
 /**

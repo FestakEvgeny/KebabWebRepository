@@ -13,27 +13,32 @@ admin panel for content moderation (validating shops and user ratings).
 ## Project structure
 
 ```
-src/
-  server.ts                 Entry point (graceful shutdown, DB retry)
-  app.ts                    Express app factory (security headers, sessions, routes)
-  config/env.ts             Zod-validated environment configuration
+src/                          Backend (Node.js + TypeScript)
+  server.ts                   Entry point (graceful shutdown, DB retry)
+  app.ts                      Express app factory (security headers, sessions, routes)
+  config/env.ts               Zod-validated environment configuration
+  api/v1.router.ts            Composition root of the public /api/v1 router
   database/
-    data-source.ts          TypeORM data source (snake_case naming strategy)
-    entities/               Shop, Rating, AdminUser entities
-    migrations/             SQL migrations (tables, indexes, CHECK constraints)
-    naming-strategy.ts      camelCase property -> snake_case column mapping
-    migrate.ts / seed.ts    Migration CLI and idempotent seed script
-    dev-db.ts               Dev-only embedded PostgreSQL helper (no Docker needed)
-  middleware/               Errors, validation, uploads, rate limiting
-  modules/
-    shop/                   Shop DTOs, service, public routes
-    rating/                 Rating DTOs, service, controller
-    health/                 GET /health
-  admin/                    Admin panel (auth, CSRF, dashboard, shops, ratings)
-views/admin/                EJS templates (layout partials, lists, forms)
-public/                     Admin stylesheet + tiny confirm-delete script
-tests/unit/                 Vitest unit tests (DTOs, services, utils)
-scripts/e2e-smoke.mjs       End-to-end smoke test against a running server
+    data-source.ts            TypeORM data source (snake_case naming strategy)
+    entities/                 Shop, Rating, AdminUser entities (one class per file)
+    migrations/               SQL migrations (tables, indexes, CHECK constraints)
+    naming-strategy.ts        camelCase property -> snake_case column mapping
+    migrate.ts / seed.ts      Migration CLI and idempotent seed script
+    dev-db.ts                 Dev-only embedded PostgreSQL helper (no Docker needed)
+  middleware/                 Errors, validation, uploads, rate limiting
+  utils/                      Shared helpers & models (one type per file):
+                              AppError, pagination, uuid checks, uploaded photo, ...
+  modules/                    Features (package-by-feature)
+    shop/                     Shop service, mapper, routes + dto/ (requests/responses)
+    rating/                   Rating service, controller, mapper + dto/
+    mobileapp/                Mobile app API (/mobileapp/v1), mapper + dto/
+    admin/                    Admin panel backend: auth, CSRF, controllers + helpers
+    health/                   GET /health
+frontend/                     Admin panel UI (served by the backend)
+  views/                      EJS templates (layout partials, lists, forms)
+  public/                     Admin stylesheet + tiny confirm-delete script
+tests/unit/                   Vitest unit tests (DTOs, services, utils)
+scripts/e2e-smoke.mjs         End-to-end smoke test against a running server
 ```
 
 ## Getting started
@@ -68,8 +73,8 @@ npm run seed                  # creates the admin user + sample shops/ratings
 ```
 
 ### 4. Run
-
 ```bash
+npm run db:start
 npm run dev                   # tsx watch (development)
 npm run build && npm start    # production build -> dist/
 ```

@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DataSource } from 'typeorm';
-import { RatingService, toRatingResponse } from '../../src/modules/rating/rating.service';
-import { CreateRatingDto } from '../../src/modules/rating/rating.dto';
+import { RatingService } from '../../src/modules/rating/rating.service';
+import { toRatingResponse } from '../../src/modules/rating/rating.mapper';
+import { CreateRatingRequest } from '../../src/modules/rating/dto/create-rating-request.dto';
 
 function createFakeRepo(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -25,7 +26,7 @@ function createFakeDataSource(repo: Record<string, unknown>): DataSource {
   return { getRepository: vi.fn(() => repo), query: vi.fn() } as unknown as DataSource;
 }
 
-const baseDto: CreateRatingDto = {
+const baseRequest: CreateRatingRequest = {
   foodQualityRating: 5,
   priceFairRating: 4,
   interiorRating: 4,
@@ -37,7 +38,7 @@ describe('RatingService.createForShop', () => {
     const repo = createFakeRepo({ findOneBy: vi.fn(async () => ({ id: 'shop-1' })) });
     const service = new RatingService(createFakeDataSource(repo));
 
-    const rating = await service.createForShop('shop-1', baseDto);
+    const rating = await service.createForShop('shop-1', baseRequest);
 
     expect(rating.isValidated).toBe(false);
     expect(rating.shopId).toBe('shop-1');
@@ -48,7 +49,7 @@ describe('RatingService.createForShop', () => {
     const repo = createFakeRepo({ findOneBy: vi.fn(async () => null) });
     const service = new RatingService(createFakeDataSource(repo));
 
-    await expect(service.createForShop('missing', baseDto)).rejects.toMatchObject({
+    await expect(service.createForShop('missing', baseRequest)).rejects.toMatchObject({
       statusCode: 404,
       code: 'NOT_FOUND',
     });
@@ -58,7 +59,7 @@ describe('RatingService.createForShop', () => {
     const repo = createFakeRepo({ findOneBy: vi.fn(async () => ({ id: 'shop-1' })) });
     const service = new RatingService(createFakeDataSource(repo));
 
-    const rating = await service.createForShop('shop-1', { ...baseDto, notes: '   ' });
+    const rating = await service.createForShop('shop-1', { ...baseRequest, notes: '   ' });
 
     expect(rating.notes).toBeNull();
   });

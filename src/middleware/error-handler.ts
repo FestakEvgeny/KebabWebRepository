@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { MulterError } from 'multer';
 import { env, isProduction } from '../config/env';
-import { AppError } from '../utils/http-error';
+import { AppError } from '../utils/app-error';
 
 export function notFoundHandler(req: Request, res: Response): void {
   respond(req, res, 404, 'NOT_FOUND', `Route ${req.method} ${req.path} not found`);

@@ -1,13 +1,16 @@
 import { Request, Response, Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler';
-import { optionalPhotoUpload, toUploadedPhoto } from '../../middleware/upload';
+import { optionalPhotoUpload } from '../../middleware/upload';
+import { toUploadedPhoto } from '../../utils/uploaded-photo';
 import { apiWriteLimiter } from '../../middleware/rate-limit';
 import { parseAndValidate } from '../../middleware/validate';
-import { AppError } from '../../utils/http-error';
+import { AppError } from '../../utils/app-error';
+import { requireUuid } from '../../utils/uuid';
 import { sendPhoto } from '../../utils/send-photo';
-import { CreateRatingDto, ListRatingsQueryDto } from './rating.dto';
-import { RatingService, toRatingResponse } from './rating.service';
-import { requireUuid } from '../shop/shop.routes';
+import { CreateRatingRequest } from './dto/create-rating-request.dto';
+import { ListRatingsQuery } from './dto/list-ratings-query.dto';
+import { RatingService } from './rating.service';
+import { toRatingResponse } from './rating.mapper';
 
 export class RatingController {
   /** Mounted at /shops/:shopId/ratings (mergeParams gives access to shopId). */
@@ -25,7 +28,7 @@ export class RatingController {
       optionalPhotoUpload('photo'),
       asyncHandler(async (req: Request, res: Response) => {
         requireUuid(req.params.shopId, 'Shop');
-        const dto = await parseAndValidate(CreateRatingDto, req.body);
+        const dto = await parseAndValidate(CreateRatingRequest, req.body);
         const rating = await this.ratings.createForShop(req.params.shopId, dto, toUploadedPhoto(req.file));
         res.status(201).json({ data: toRatingResponse(rating) });
       }),
@@ -35,7 +38,7 @@ export class RatingController {
       '/',
       asyncHandler(async (req: Request, res: Response) => {
         requireUuid(req.params.shopId, 'Shop');
-        const query = await parseAndValidate(ListRatingsQueryDto, req.query);
+        const query = await parseAndValidate(ListRatingsQuery, req.query);
         // Public consumers only see validated ratings by default.
         const result = await this.ratings.listByShop(req.params.shopId, {
           page: query.page,

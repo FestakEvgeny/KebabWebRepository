@@ -1,47 +1,18 @@
 import { DataSource, Repository } from 'typeorm';
 import { Shop } from '../../database/entities/shop.entity';
-import { CreateShopDto, UpdateShopDto } from './shop.dto';
-import { UploadedPhoto } from '../../middleware/upload';
-import { AppError } from '../../utils/http-error';
-import { PaginationMeta, parsePagination, paginationMeta } from '../../utils/pagination';
-
-export interface ShopResponse {
-  id: string;
-  name: string;
-  geo: { latitude: number; longitude: number };
-  rating: number | null;
-  countOfRates: number | null;
-  hasPhoto: boolean;
-  photoUrl: string | null;
-  isValidated: boolean;
-  createdAt: string;
-  updatedAt: string;
-  distanceKm?: number;
-}
-
-export interface ShopWithDistance extends ShopResponse {
-  distanceKm?: number;
-}
-
-export interface PaginatedShops {
-  data: ShopWithDistance[];
-  pagination: PaginationMeta;
-}
-
-export interface ShopListFilters {
-  page?: unknown;
-  limit?: unknown;
-  isValidated?: boolean;
-  search?: string;
-  lat?: number;
-  lng?: number;
-  radiusKm?: number;
-}
-
-export interface PhotoUpdate {
-  photo?: UploadedPhoto;
-  removePhoto?: boolean;
-}
+import { CreateShopRequest } from './dto/create-shop-request.dto';
+import { UpdateShopRequest } from './dto/update-shop-request.dto';
+import { ShopListResponse } from './dto/shop-list-response.dto';
+import { ShopListFilters } from './shop-list-filters';
+import { ShopStats } from './shop-stats';
+import { toShopResponse } from './shop.mapper';
+import { UploadedPhoto } from '../../utils/uploaded-photo';
+import { PhotoUpdate } from '../../utils/photo-update';
+import { AppError } from '../../utils/app-error';
+import { parsePagination } from '../../utils/parse-pagination';
+import { paginationMeta } from '../../utils/pagination-meta';
+import { round2 } from '../../utils/math';
+import { escapeLike } from '../../utils/escape-like';
 
 /** Columns loaded for list queries; photo blobs are excluded to keep pages light. */
 const SHOP_LIST_COLUMNS = [
@@ -59,26 +30,6 @@ const SHOP_LIST_COLUMNS = [
 
 const EARTH_RADIUS_KM = 6371;
 
-export function toShopResponse(shop: Shop): ShopResponse {
-  const hasPhoto = Boolean(shop.photo ?? null) || Boolean(shop.photoMimeType ?? null);
-  return {
-    id: shop.id,
-    name: shop.name,
-    geo: { latitude: shop.latitude, longitude: shop.longitude },
-    rating: shop.rating === null || shop.rating === undefined ? null : Number(shop.rating),
-    countOfRates: shop.countOfRates ?? null,
-    hasPhoto,
-    photoUrl: hasPhoto ? `/api/v1/shops/${shop.id}/photo` : null,
-    isValidated: shop.isValidated,
-    createdAt: shop.createdAt instanceof Date ? shop.createdAt.toISOString() : String(shop.createdAt),
-    updatedAt: shop.updatedAt instanceof Date ? shop.updatedAt.toISOString() : String(shop.updatedAt),
-  };
-}
-
-export function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
-}
-
 export class ShopService {
   private readonly repo: Repository<Shop>;
 
@@ -86,7 +37,7 @@ export class ShopService {
     this.repo = ds.getRepository(Shop);
   }
 
-  async create(dto: CreateShopDto, photo?: UploadedPhoto): Promise<Shop> {
+  async create(dto: CreateShopRequest, photo?: UploadedPhoto): Promise<Shop> {
     const shop = this.repo.create({
       name: dto.name.trim(),
       latitude: dto.latitude,
@@ -112,7 +63,7 @@ export class ShopService {
     return shop;
   }
 
-  async list(filters: ShopListFilters): Promise<PaginatedShops> {
+  async list(filters: ShopListFilters): Promise<ShopListResponse> {
     const { page, limit, skip } = parsePagination(filters);
     const qb = this.repo.createQueryBuilder('shop').select(SHOP_LIST_COLUMNS);
 
@@ -170,7 +121,7 @@ export class ShopService {
     return { buffer: shop.photo, mimeType: shop.photoMimeType ?? 'application/octet-stream' };
   }
 
-  async update(id: string, dto: UpdateShopDto, photoUpdate: PhotoUpdate = {}): Promise<Shop> {
+  async update(id: string, dto: UpdateShopRequest, photoUpdate: PhotoUpdate = {}): Promise<Shop> {
     const shop = await this.getById(id);
     shop.name = dto.name.trim();
     shop.latitude = dto.latitude;
@@ -212,12 +163,7 @@ export class ShopService {
     );
   }
 
-  async stats(): Promise<{
-    totalShops: number;
-    pendingShops: number;
-    totalRatings: number;
-    pendingRatings: number;
-  }> {
+  async stats(): Promise<ShopStats> {
     const rows = (await this.repo.query(
       `SELECT
          (SELECT COUNT(*)::int FROM shop_table) AS total_shops,
@@ -240,7 +186,7 @@ export class ShopService {
   }
 }
 
-export function applyPhotoUpdate(shop: Shop, photoUpdate: PhotoUpdate): void {
+function applyPhotoUpdate(shop: Shop, photoUpdate: PhotoUpdate): void {
   if (photoUpdate.photo) {
     shop.photo = photoUpdate.photo.buffer;
     shop.photoMimeType = photoUpdate.photo.mimeType;
@@ -257,8 +203,4 @@ function distanceExpression(lat: number, lng: number): string {
     `cos(radians(${lat})) * cos(radians(shop.latitude)) * cos(radians(shop.longitude) - radians(${lng})) + ` +
     `sin(radians(${lat})) * sin(radians(shop.latitude))))))`
   );
-}
-
-export function round2(value: number): number {
-  return Math.round(value * 100) / 100;
 }
