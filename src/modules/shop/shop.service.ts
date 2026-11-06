@@ -1,5 +1,6 @@
 import { DataSource, Repository } from 'typeorm';
 import { Shop } from '../../database/entities/shop.entity';
+import { Rating } from '../../database/entities/rating.entity';
 import { CreateShopRequest } from './dto/create-shop-request.dto';
 import { UpdateShopRequest } from './dto/update-shop-request.dto';
 import { ShopListResponse } from './dto/shop-list-response.dto';
@@ -60,6 +61,16 @@ export class ShopService {
   async getById(id: string): Promise<Shop> {
     const shop = await this.repo.findOneBy({ id });
     if (!shop) throw AppError.notFound(`Shop with id "${id}" was not found.`);
+    return shop;
+  }
+
+  /** Single shop for the mobile detail view; only validated ratings are exposed. */
+  async getByIdWithRatings(id: string): Promise<Shop> {
+    const shop = await this.getById(id);
+    shop.ratings = await this.ds.getRepository(Rating).find({
+      where: { shopId: id, isValidated: true },
+      order: { createdAt: 'DESC' },
+    });
     return shop;
   }
 

@@ -9,6 +9,7 @@ import { CreateShopRequest } from '../shop/dto/create-shop-request.dto';
 import { ShopService } from '../shop/shop.service';
 import { RatingService } from '../rating/rating.service';
 import { MobileAddRatingRequest } from './dto/mobile-add-rating-request.dto';
+import { MobileGetSingleShopQuery } from './dto/mobile-get-single-shop-query.dto';
 import { toMobileShopResponse, toMobileRatingResponse } from './mobileapp.mapper';
 import { toSingleMobileShopResponse } from '../shop/mapper/shop-single-mobile-response-mapper';
 
@@ -54,12 +55,12 @@ export function createMobileAppRouter(dataSource: DataSource): Router {
 
   router.get(
     '/shop/getSingle',
-    apiWriteLimiter,
-      asyncHandler(async (req: Request, res: Response) => {
-      const shop = await shopService.getById(req.body);
+    asyncHandler(async (req: Request, res: Response) => {
+      const query = await parseAndValidate(MobileGetSingleShopQuery, req.query);
+      const shop = await shopService.getByIdWithRatings(query.id);
       res.json({ data: toSingleMobileShopResponse(shop) });
     }),
-  )
+  );
 
   return router;
 }
