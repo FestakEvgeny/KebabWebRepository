@@ -13,6 +13,7 @@ import { createHealthRouter } from './modules/health/health.routes';
 import { createAdminRouter } from './modules/admin/admin.routes';
 import { ShopService } from './modules/shop/shop.service';
 import { RatingService } from './modules/rating/rating.service';
+import { OAuthService } from './modules/oauth/oauth.service';
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
 
 export function createApp(dataSource: DataSource): Express {
@@ -22,6 +23,7 @@ export function createApp(dataSource: DataSource): Express {
   // and the admin panel.
   const shopService = new ShopService(dataSource);
   const ratingService = new RatingService(dataSource);
+  const oauthService = new OAuthService(dataSource);
 
   app.disable('x-powered-by');
   app.set('json escape', true);
@@ -89,7 +91,7 @@ export function createApp(dataSource: DataSource): Express {
   app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
   app.use('/health', createHealthRouter(dataSource));
-  app.use('/api/v1', createApiV1Router({ shopService, ratingService }));
+  app.use('/api/v1', createApiV1Router({ shopService, ratingService, oauthService }));
   app.use('/admin', createAdminRouter({ dataSource, shopService, ratingService }));
 
   app.use(notFoundHandler);

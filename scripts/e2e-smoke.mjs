@@ -1,7 +1,8 @@
 /**
  * End-to-end smoke test against a running server (default http://localhost:3000).
- * Exercises the public API, photo upload/serving, the admin login flow (session +
- * CSRF) and the rating validation workflow including shop aggregate recomputation.
+ * Exercises the public API (OAuth bearer-token flow, shop/rating submission,
+ * photo upload/serving), the admin login flow (session + CSRF) and the rating
+ * validation workflow including shop aggregate recomputation.
  *
  *   node scripts/e2e-smoke.mjs [baseUrl]
  */
@@ -49,9 +50,16 @@ function storeCookies(response) {
   }
 }
 
+// Bearer access token for /api/v1 (obtained from GET /api/v1/oauth/token below).
+let accessToken;
+
 async function request(path, options = {}) {
   const headers = { ...(options.headers ?? {}) };
   if (cookies.size > 0 && !options.noCookies) headers.cookie = cookieHeader();
+  // Every /api/v1 route except the token endpoints requires a Bearer access token.
+  if (accessToken && path.startsWith('/api/v1') && !path.startsWith('/api/v1/oauth')) {
+    headers.authorization = `Bearer ${accessToken}`;
+  }
   const response = await fetch(`${BASE_URL}${path}`, { ...options, headers, redirect: 'manual' });
   storeCookies(response);
   return response;
@@ -75,6 +83,61 @@ async function main() {
     const health = await request('/health');
     const body = await readJson(health);
     check('GET /health returns 200 with database up', health.status === 200 && body.database === 'up');
+  }
+
+  console.log('\nOAuth token flow (public API)');
+  let refreshToken;
+  {
+    const unauthenticated = await request('/api/v1/shops');
+    check(
+      'GET /api/v1/shops without a Bearer token returns 401 UNAUTHORIZED',
+      unauthenticated.status === 401,
+    );
+
+    const issued = await request('/api/v1/oauth/token');
+    const issuedBody = await readJson(issued);
+    accessToken = issuedBody?.data?.accessToken;
+    refreshToken = issuedBody?.data?.refreshToken;
+    check(
+      'GET /api/v1/oauth/token returns 201 with a unique token pair',
+      issued.status === 201 &&
+        typeof accessToken === 'string' &&
+        accessToken.length > 0 &&
+        typeof refreshToken === 'string' &&
+        refreshToken !== accessToken,
+    );
+
+    const refreshed = await request('/api/v1/oauth/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    const refreshedBody = await readJson(refreshed);
+    check(
+      'POST /api/v1/oauth/token rotates the access token and reuses the refresh token',
+      refreshed.status === 200 &&
+        refreshedBody.data.accessToken !== accessToken &&
+        refreshedBody.data.refreshToken === refreshToken,
+    );
+    accessToken = refreshedBody.data.accessToken;
+
+    const unknownRefresh = await request('/api/v1/oauth/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: 'not-a-real-refresh-token' }),
+    });
+    check(
+      'POST /api/v1/oauth/token with an unknown refresh token returns 400',
+      unknownRefresh.status === 400,
+    );
+
+    const staleToken = await fetch(`${BASE_URL}/api/v1/shops`, {
+      headers: { authorization: `Bearer ${'0'.repeat(64)}` },
+    });
+    check(
+      'GET /api/v1/shops with an invalid token returns 401 INVALID_ACCESS_TOKEN',
+      staleToken.status === 401,
+    );
   }
 
   console.log('\nShop creation (public API)');

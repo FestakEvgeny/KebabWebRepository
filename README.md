@@ -31,6 +31,8 @@ src/                          Backend (Node.js + TypeScript)
   utils/                      Shared helpers & models (one type per file):
                               AppError, pagination, uuid checks, uploaded photo, ...
   modules/                    Features (package-by-feature)
+    oauth/                    OAuth token service (access + refresh token pairs),
+                              token controller & routes, bearer auth for /api/v1
     shop/                     Shop service (returns entities), HTTP controller,
                               routes, public mappers + dto/
     rating/                   Rating service, HTTP controller (nested + flat
@@ -134,10 +136,56 @@ Base URL: `/api/v1`. All responses are JSON (`{ data }` on success,
 `{ error: { code, message, details? } }` on failure). Photos are stored as
 `bytea` blobs and served through dedicated photo endpoints with ETag caching.
 
+**Every `/api/v1` endpoint requires a valid access token** sent as
+`Authorization: Bearer <accessToken>` — except the token endpoints themselves
+(see below). Requests without a token get `401 UNAUTHORIZED`; requests with an
+unknown or expired access token get `401 INVALID_ACCESS_TOKEN`.
+
 Public responses never contain the moderation flag `isValidated`, and public
 listings only ever include **validated** content — pending items are visible
 to admins (in `/admin`) and, for the submit-then-view flow, when fetched
 directly by their unguessable UUID id.
+
+### OAuth tokens
+
+| Method | Path                     | Description                                                       |
+| ------ | ------------------------ | ----------------------------------------------------------------- |
+| GET    | `/api/v1/oauth/token`    | Issue a new access + refresh token pair (no auth required).        |
+| POST   | `/api/v1/oauth/token`    | Exchange a refresh token for a new access token.                   |
+
+Token lifetimes are configurable: `ACCESS_TOKEN_TTL_SECONDS` (default 86400 =
+1 day) and `REFRESH_TOKEN_TTL_SECONDS` (default 2592000 = 30 days). Both
+tokens are random 256-bit values, globally unique in the `auth_table` table.
+
+The flow:
+
+1. `GET /api/v1/oauth/token` returns a fresh pair (HTTP 201):
+
+   ```json
+   {
+     "data": {
+       "accessToken": "6f9c…",
+       "refreshToken": "3b1a…",
+       "tokenType": "Bearer",
+       "expiresIn": 86400,
+       "accessExpiresAt": "2026-11-07T12:00:00.000Z",
+       "refreshExpiresAt": "2026-12-06T12:00:00.000Z"
+     }
+   }
+   ```
+
+2. Call any other `/api/v1` endpoint with `Authorization: Bearer <accessToken>`.
+
+3. Once the access token expired (401 `INVALID_ACCESS_TOKEN`), refresh it:
+
+   `POST /api/v1/oauth/token` with body `{ "refreshToken": "…" }` — returns a
+   **new access token** while keeping the same refresh token (the refresh
+   token and its expiry are never changed).
+
+4. When the refresh token has expired too, the same POST deletes the whole
+   `auth_table` record and returns **400** `REFRESH_TOKEN_EXPIRED` (an unknown
+   refresh token returns 400 `INVALID_REFRESH_TOKEN`). The client must start
+   over with GET.
 
 ### Shops
 
@@ -228,6 +276,10 @@ confirmation in the browser.
   timestamps. Indexes on `shop_id` and `is_validated`.
 - **admin_user** — `id`, unique `email`, `password_hash`.
 - **admin_session** — express-session store table.
+- **auth_table** — issued OAuth token pairs: `id`, globally unique
+  `access_token` and `refresh_token`, `access_token_expires_at`,
+  `refresh_token_expires_at`, timestamps. An expired refresh token deletes
+  the whole row (enforced by the refresh endpoint).
 
 ## Security notes
 
@@ -235,6 +287,9 @@ confirmation in the browser.
 - Parameterised queries everywhere (no string-built SQL with user input);
   LIKE searches escape `%`/`_`/`\`.
 - Strict DTO validation with unknown-property stripping on every write.
+- Public API authenticated with opaque 256-bit random bearer tokens; unique
+  constraints in `auth_table` guarantee no two clients share a token.
 - Uploads limited to images, size-capped, held in memory only.
-- Rate limits: public write endpoints (configurable) and admin login attempts.
+- Rate limits: public write endpoints + token endpoints (configurable) and
+  admin login attempts.
 - Production guard refuses to boot with the default `SESSION_SECRET`.

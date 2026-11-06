@@ -2,11 +2,12 @@ import path from 'node:path';
 import { DataSource } from 'typeorm';
 import { env } from '../config/env';
 import { AdminUser } from './entities/admin-user.entity';
+import { AuthToken } from './entities/auth-token.entity';
 import { Rating } from './entities/rating.entity';
 import { Shop } from './entities/shop.entity';
 import { SnakeNamingStrategy } from './naming-strategy';
 
-export const entities = [Shop, Rating, AdminUser];
+export const entities = [Shop, Rating, AdminUser, AuthToken];
 
 export interface CreateDataSourceOptions {
   /** Run pending migrations during initialize(). Defaults to RUN_MIGRATIONS_ON_START. */

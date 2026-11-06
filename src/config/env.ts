@@ -28,6 +28,9 @@ const envSchema = z.object({
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(15 * 60 * 1000),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().min(1).default(100),
+
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(1).default(24 * 60 * 60),
+  REFRESH_TOKEN_TTL_SECONDS: z.coerce.number().int().min(1).default(30 * 24 * 60 * 60),
 });
 
 const parsed = envSchema.safeParse(process.env);
