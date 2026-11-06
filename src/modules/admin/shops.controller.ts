@@ -7,7 +7,7 @@ import { AppError } from '../../utils/error/app-error';
 import { CreateShopRequest } from '../shop/dto/create-shop-request.dto';
 import { UpdateShopRequest } from '../shop/dto/update-shop-request.dto';
 import { ShopService } from '../shop/shop.service';
-import { toShopResponse } from '../shop/shop.mapper';
+import { toAdminShopResponse, toAdminRatingResponse } from './admin.mapper';
 import { RatingService } from '../rating/rating.service';
 import { buildPaginationVm } from './pagination-vm';
 import { flattenErrorMessages } from './flatten-error-messages';
@@ -44,7 +44,7 @@ export function registerAdminShopRoutes(
         active: 'shops',
         status,
         search,
-        shops: result.data,
+        shops: result.data.map(toAdminShopResponse),
         pagination: buildPaginationVm(req, result.pagination),
       });
     }),
@@ -98,8 +98,8 @@ export function registerAdminShopRoutes(
       renderAdmin(req, res, 'shops/show', {
         title: shop.name,
         active: 'shops',
-        shop: toShopResponse(shop),
-        shopRatings: shopRatings.data,
+        shop: toAdminShopResponse(shop),
+        shopRatings: shopRatings.data.map((rating) => toAdminRatingResponse(rating)),
       });
     }),
   );
@@ -113,7 +113,7 @@ export function registerAdminShopRoutes(
         active: 'shops',
         action: `/admin/shops/${shop.id}/update`,
         submitLabel: 'Save changes',
-        shop: toShopResponse(shop),
+        shop: toAdminShopResponse(shop),
         values: {
           name: shop.name,
           latitude: shop.latitude,
@@ -149,7 +149,7 @@ export function registerAdminShopRoutes(
             active: 'shops',
             action: `/admin/shops/${shopId}/update`,
             submitLabel: 'Save changes',
-            shop: shop ? toShopResponse(shop) : undefined,
+            shop: shop ? toAdminShopResponse(shop) : undefined,
             values: req.body,
             errors: flattenErrorMessages(error),
           });

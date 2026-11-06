@@ -39,24 +39,21 @@ describe('CreateShopRequest', () => {
 });
 
 describe('ListShopsQuery', () => {
-  it('parses booleans, numbers and clamps-free raw values from the query string', async () => {
+  it('parses numbers and strings from the query string', async () => {
     const dto = await parseAndValidate(ListShopsQuery, {
       page: '2',
       limit: '50',
-      isValidated: 'true',
       lat: '52.5',
       lng: '13.4',
     });
     expect(dto.page).toBe(2);
     expect(dto.limit).toBe(50);
-    expect(dto.isValidated).toBe(true);
     expect(dto.lat).toBe(52.5);
   });
 
-  it('rejects garbage boolean values', async () => {
-    await expect(
-      parseAndValidate(ListShopsQuery, { isValidated: 'yes' }),
-    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  it('strips the moderation flag — validation status is not a public filter', async () => {
+    const dto = await parseAndValidate(ListShopsQuery, { isValidated: 'false' });
+    expect((dto as unknown as Record<string, unknown>).isValidated).toBeUndefined();
   });
 });
 

@@ -1,3 +1,8 @@
+/**
+ * Public rating payload (API v1). The moderation flag is internal: the public
+ * API never exposes `isValidated` — only the admin panel sees it. `shopName`
+ * is only present on admin listings.
+ */
 export interface RatingResponse {
   id: string;
   shopId: string;
@@ -9,7 +14,6 @@ export interface RatingResponse {
   notes: string | null;
   hasPhoto: boolean;
   photoUrl: string | null;
-  isValidated: boolean;
   createdAt: string;
   updatedAt: string;
 }

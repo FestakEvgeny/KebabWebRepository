@@ -4,10 +4,10 @@ import { Shop } from '../../database/entities/shop.entity';
 import { CreateRatingRequest } from './dto/create-rating-request.dto';
 import { AdminCreateRatingRequest } from './dto/admin-create-rating-request.dto';
 import { UpdateRatingRequest } from './dto/update-rating-request.dto';
-import { RatingListResponse } from './dto/rating-list-response.dto';
+import { PaginatedList } from '../../utils/pagination/paginated-list';
 import { ListRatingsOptions } from './list-ratings-options';
 import { AdminRatingListFilters } from './admin-rating-list-filters';
-import { toRatingResponse } from './rating.mapper';
+import { AdminRatingListItem } from './admin-rating-list-item';
 import { UploadedPhoto } from '../../utils/photo/uploaded-photo';
 import { PhotoUpdate } from '../../utils/photo/photo-update';
 import { AppError } from '../../utils/error/app-error';
@@ -81,7 +81,7 @@ export class RatingService {
     return rating;
   }
 
-  async listByShop(shopId: string, options: ListRatingsOptions): Promise<RatingListResponse> {
+  async listByShop(shopId: string, options: ListRatingsOptions): Promise<PaginatedList<Rating>> {
     const { page, limit, skip } = parsePagination(options);
     const qb = this.repo
       .createQueryBuilder('rating')
@@ -98,13 +98,10 @@ export class RatingService {
       .take(limit)
       .getManyAndCount();
 
-    return {
-      data: ratings.map((rating) => toRatingResponse(rating)),
-      pagination: paginationMeta(page, limit, total),
-    };
+    return { data: ratings, pagination: paginationMeta(page, limit, total) };
   }
 
-  async listAdmin(filters: AdminRatingListFilters): Promise<RatingListResponse> {
+  async listAdmin(filters: AdminRatingListFilters): Promise<PaginatedList<AdminRatingListItem>> {
     const { page, limit, skip } = parsePagination(filters);
     const qb = this.repo
       .createQueryBuilder('rating')
@@ -140,7 +137,7 @@ export class RatingService {
     const data = entities.map((rating, index) => {
       const row = raw[index] as Record<string, unknown> | undefined;
       const shopName = typeof row?.shop_name === 'string' ? row.shop_name : undefined;
-      return toRatingResponse(rating, shopName);
+      return { rating, shopName };
     });
 
     return { data, pagination: paginationMeta(page, limit, total) };

@@ -14,6 +14,12 @@ import { registerDashboardRoutes } from './dashboard.controller';
 import { registerAdminShopRoutes } from './shops.controller';
 import { registerAdminRatingRoutes } from './ratings.controller';
 
+export interface AdminRouterDeps {
+  dataSource: DataSource;
+  shopService: ShopService;
+  ratingService: RatingService;
+}
+
 // Constant hash used to equalise response times when the email is unknown.
 const DUMMY_HASH = bcrypt.hashSync('timing-equalizer', 12);
 
@@ -23,10 +29,15 @@ function regenerateSession(req: Request): Promise<void> {
   });
 }
 
-export function createAdminRouter(dataSource: DataSource): Router {
+/**
+ * The server-rendered admin panel. This is the ONLY place with login and
+ * moderation operations (validate/unvalidate shops and ratings) — every such
+ * page requires an admin session, and every mutation is CSRF-protected.
+ */
+export function createAdminRouter({ dataSource, shopService, ratingService }: AdminRouterDeps): Router {
   const router = Router();
-  const shops = new ShopService(dataSource);
-  const ratings = new RatingService(dataSource);
+  const shops = shopService;
+  const ratings = ratingService;
   const adminRepo: Repository<AdminUser> = dataSource.getRepository(AdminUser);
 
   // Every admin page needs a CSRF token in its forms.

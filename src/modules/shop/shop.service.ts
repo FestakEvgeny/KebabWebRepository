@@ -3,10 +3,9 @@ import { Shop } from '../../database/entities/shop.entity';
 import { Rating } from '../../database/entities/rating.entity';
 import { CreateShopRequest } from './dto/create-shop-request.dto';
 import { UpdateShopRequest } from './dto/update-shop-request.dto';
-import { ShopListResponse } from './dto/shop-list-response.dto';
+import { PaginatedList } from '../../utils/pagination/paginated-list';
 import { ShopListFilters } from './shop-list-filters';
 import { ShopStats } from './shop-stats';
-import { toShopResponse } from './shop.mapper';
 import { UploadedPhoto } from '../../utils/photo/uploaded-photo';
 import { PhotoUpdate } from '../../utils/photo/photo-update';
 import { AppError } from '../../utils/error/app-error';
@@ -31,6 +30,9 @@ const SHOP_LIST_COLUMNS = [
 
 const EARTH_RADIUS_KM = 6371;
 
+/** Shop list item; `distanceKm` is attached when a geo filter was applied. */
+export type ShopListItem = Shop & { distanceKm?: number };
+
 export class ShopService {
   private readonly repo: Repository<Shop>;
 
@@ -49,11 +51,16 @@ export class ShopService {
     return this.repo.save(shop);
   }
 
-  /** Every shop in one response, no pagination (mobile app); photo blobs excluded. */
+  /**
+   * Every validated shop in one response, no pagination (mobile catalogue);
+   * pending shops are hidden from all public listings until an admin
+   * validates them. Photo blobs are excluded to keep the payload light.
+   */
   async listAll(): Promise<Shop[]> {
     return this.repo
       .createQueryBuilder('shop')
       .select(SHOP_LIST_COLUMNS)
+      .where('shop.isValidated = :isValidated', { isValidated: true })
       .orderBy('shop.createdAt', 'DESC')
       .getMany();
   }
@@ -64,7 +71,10 @@ export class ShopService {
     return shop;
   }
 
-  /** Single shop for the mobile detail view; only validated ratings are exposed. */
+  /**
+   * Single shop for the detail view plus its validated ratings (newest
+   * first); only validated ratings are exposed to the public.
+   */
   async getByIdWithRatings(id: string): Promise<Shop> {
     const shop = await this.getById(id);
     shop.ratings = await this.ds.getRepository(Rating).find({
@@ -74,7 +84,7 @@ export class ShopService {
     return shop;
   }
 
-  async list(filters: ShopListFilters): Promise<ShopListResponse> {
+  async list(filters: ShopListFilters): Promise<PaginatedList<ShopListItem>> {
     const { page, limit, skip } = parsePagination(filters);
     const qb = this.repo.createQueryBuilder('shop').select(SHOP_LIST_COLUMNS);
 
@@ -110,17 +120,16 @@ export class ShopService {
     qb.skip(skip).take(limit);
 
     const { raw, entities } = await qb.getRawAndEntities();
-    const data = entities.map((shop, index) => {
-      const response = toShopResponse(shop as Shop);
-      if (useDistance) {
+    const items = entities as ShopListItem[];
+    if (useDistance) {
+      for (const [index, shop] of items.entries()) {
         const row = raw[index] as Record<string, unknown> | undefined;
         const distanceValue = Number(row?.distance_km ?? NaN);
-        if (Number.isFinite(distanceValue)) response.distanceKm = round2(distanceValue);
+        if (Number.isFinite(distanceValue)) shop.distanceKm = round2(distanceValue);
       }
-      return response;
-    });
+    }
 
-    return { data, pagination: paginationMeta(page, limit, total) };
+    return { data: items, pagination: paginationMeta(page, limit, total) };
   }
 
   async getPhoto(id: string): Promise<{ buffer: Buffer; mimeType: string } | null> {

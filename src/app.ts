@@ -11,11 +11,17 @@ import { env, isDevelopment } from './config/env';
 import { createApiV1Router } from './api/v1.router';
 import { createHealthRouter } from './modules/health/health.routes';
 import { createAdminRouter } from './modules/admin/admin.routes';
-import { createMobileAppRouter } from './modules/mobileapp/mobileapp.routes';
+import { ShopService } from './modules/shop/shop.service';
+import { RatingService } from './modules/rating/rating.service';
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
 
 export function createApp(dataSource: DataSource): Express {
   const app = express();
+
+  // Composition root: one service instance per app, shared by the public API
+  // and the admin panel.
+  const shopService = new ShopService(dataSource);
+  const ratingService = new RatingService(dataSource);
 
   app.disable('x-powered-by');
   app.set('json escape', true);
@@ -83,9 +89,8 @@ export function createApp(dataSource: DataSource): Express {
   app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
   app.use('/health', createHealthRouter(dataSource));
-  app.use('/api/v1', createApiV1Router(dataSource));
-  app.use('/mobileapp/v1', createMobileAppRouter(dataSource));
-  app.use('/admin', createAdminRouter(dataSource));
+  app.use('/api/v1', createApiV1Router({ shopService, ratingService }));
+  app.use('/admin', createAdminRouter({ dataSource, shopService, ratingService }));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

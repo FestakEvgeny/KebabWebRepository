@@ -4,6 +4,7 @@ import { asyncHandler } from '../../middleware/async-handler';
 import { ShopService } from '../shop/shop.service';
 import { RatingService } from '../rating/rating.service';
 import { renderAdmin } from './render-admin';
+import { toAdminRatingResponse } from './admin.mapper';
 
 export function registerDashboardRoutes(
   router: Router,
@@ -19,7 +20,9 @@ export function registerDashboardRoutes(
         title: 'Dashboard',
         active: 'dashboard',
         stats,
-        pendingRatings: pendingRatings.data,
+        pendingRatings: pendingRatings.data.map((item) =>
+          toAdminRatingResponse(item.rating, item.shopName),
+        ),
       });
     }),
   );

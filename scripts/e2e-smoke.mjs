@@ -7,6 +7,11 @@
  */
 const BASE_URL = process.argv[2] ?? process.env.BASE_URL ?? 'http://localhost:3000';
 
+// Unique token per run so repeated runs on a dirty database stay unambiguous.
+const RUN = Date.now().toString(36);
+const PHOTO_SHOP_NAME = `E2E ${RUN} Photo Shop`;
+const PLAIN_SHOP_NAME = `E2E ${RUN} Plain Shop`;
+
 const PNG_BYTES = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
   'base64',
@@ -88,7 +93,7 @@ async function main() {
     );
 
     const form = new FormData();
-    form.set('name', 'E2E Photo Shop');
+    form.set('name', PHOTO_SHOP_NAME);
     form.set('latitude', '52.52');
     form.set('longitude', '13.405');
     form.set('photo', new Blob([PNG_BYTES], { type: 'image/png' }), 'shop.png');
@@ -96,23 +101,43 @@ async function main() {
     const createdBody = await readJson(created);
     shopWithPhotoId = createdBody?.data?.id;
     check(
-      'POST /api/v1/shops (multipart with photo) returns 201, pending, hasPhoto',
+      'POST /api/v1/shops (multipart with photo) returns 201, no moderation flag',
       created.status === 201 &&
-        createdBody.data.isValidated === false &&
         createdBody.data.hasPhoto === true &&
-        typeof shopWithPhotoId === 'string',
+        typeof shopWithPhotoId === 'string' &&
+        !('isValidated' in createdBody.data),
     );
 
     const plain = await request('/api/v1/shops', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'E2E Plain Shop', latitude: 52.53, longitude: 13.42 }),
+      body: JSON.stringify({ name: PLAIN_SHOP_NAME, latitude: 52.53, longitude: 13.42 }),
     });
     const plainBody = await readJson(plain);
     plainShopId = plainBody?.data?.id;
+    check('POST /api/v1/shops (JSON) returns 201', plain.status === 201 && typeof plainShopId === 'string');
+  }
+
+  console.log('\nModeration privacy (public listings hide pending shops)');
+  {
+    const list = await readJson(await request(`/api/v1/shops?search=${encodeURIComponent(PHOTO_SHOP_NAME)}`));
     check(
-      'POST /api/v1/shops (JSON) returns 201',
-      plain.status === 201 && plainBody.data.isValidated === false,
+      'GET /api/v1/shops does not list pending shops',
+      Array.isArray(list.data) && list.data.length === 0,
+    );
+
+    const all = await readJson(await request('/api/v1/shops/all'));
+    check(
+      'GET /api/v1/shops/all hides pending shops and the moderation flag',
+      Array.isArray(all.data) &&
+        all.data.every((shop) => !('isValidated' in shop)) &&
+        !all.data.some((shop) => shop.id === plainShopId || shop.id === shopWithPhotoId),
+    );
+
+    const detail = await readJson(await request(`/api/v1/shops/${plainShopId}`));
+    check(
+      'GET /api/v1/shops/:id returns a shop by id (submit-then-view works) with ratingsList',
+      detail.data.id === plainShopId && Array.isArray(detail.data.ratingsList),
     );
   }
 
@@ -129,34 +154,6 @@ async function main() {
 
     const missing = await request(`/api/v1/shops/${plainShopId}/photo`);
     check('GET photo for a shop without one returns 404', missing.status === 404);
-  }
-
-  console.log('\nShop listing & geo filter');
-  {
-    const list = await request('/api/v1/shops?page=1&limit=2&search=E2E');
-    const body = await readJson(list);
-    check(
-      'GET /api/v1/shops supports pagination and search',
-      list.status === 200 &&
-        body.data.length >= 1 &&
-        body.pagination.limit === 2 &&
-        body.data.every((shop) => shop.name.includes('E2E')),
-    );
-
-    const near = await request(
-      '/api/v1/shops?lat=52.52&lng=13.405&radiusKm=1&search=E2E%20Photo',
-    );
-    const nearBody = await readJson(near);
-    check(
-      'GET /api/v1/shops geo filter returns the shop with a distance',
-      near.status === 200 &&
-        nearBody.data.length === 1 &&
-        typeof nearBody.data[0].distanceKm === 'number',
-    );
-
-    const far = await request('/api/v1/shops?lat=0&lng=0&radiusKm=1&search=E2E%20Photo');
-    const farBody = await readJson(far);
-    check('GET /api/v1/shops geo filter excludes shops outside radius', farBody.data.length === 0);
   }
 
   console.log('\nRatings (public API)');
@@ -182,7 +179,7 @@ async function main() {
     ratingId = body?.data?.id;
     check(
       'POST rating returns 201 pending rating with overall 4.33',
-      created.status === 201 && body.data.isValidated === false && body.data.overallRating === 4.33,
+      created.status === 201 && body.data.overallRating === 4.33 && !('isValidated' in body.data),
     );
 
     const shopNow = await readJson(await request(`/api/v1/shops/${plainShopId}`));
@@ -210,79 +207,24 @@ async function main() {
     check('POST rating for a missing shop returns 404', missingShop.status === 404);
   }
 
-  console.log('\nMobile app API');
-  let mobileShopId;
+  console.log('\nRetired mobile routes are gone');
   {
-    const allShops = await request('/mobileapp/v1/allShops');
-    const allBody = await readJson(allShops);
+    const gone = await request('/mobileapp/v1/allShops');
+    check('GET /mobileapp/v1/allShops returns 404 (router removed)', gone.status === 404);
+
+    const allShops = await readJson(await request('/api/v1/shops/all'));
     check(
-      'GET /mobileapp/v1/allShops returns all shops, no pagination, no isValidated',
-      allShops.status === 200 &&
-        Array.isArray(allBody.data) &&
-        allBody.pagination === undefined &&
-        allBody.data.some((shop) => shop.id === plainShopId) &&
-        allBody.data.every((shop) => !('isValidated' in shop)),
+      'GET /api/v1/shops/all is the mobile catalogue: validated only, no pagination, no isValidated',
+      Array.isArray(allShops.data) &&
+        allShops.pagination === undefined &&
+        allShops.data.every((shop) => !('isValidated' in shop)) &&
+        !allShops.data.some((shop) => shop.id === plainShopId || shop.id === shopWithPhotoId),
     );
 
-    const add = await request('/mobileapp/v1/shop/add', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        name: 'E2E Mobile Shop',
-        latitude: 52.54,
-        longitude: 13.43,
-        isValidated: true,
-      }),
-    });
-    const addBody = await readJson(add);
-    mobileShopId = addBody?.data?.id;
+    const getSingle = await readJson(await request(`/api/v1/shops/${plainShopId}`));
     check(
-      'POST /mobileapp/v1/shop/add returns 201 and ignores the isValidated field',
-      add.status === 201 && typeof mobileShopId === 'string' && !('isValidated' in addBody.data),
-    );
-
-    const storedShop = await readJson(await request(`/api/v1/shops/${mobileShopId}`));
-    check(
-      'shop created via mobile app is stored pending (is_validated = false)',
-      storedShop.data.isValidated === false,
-    );
-
-    const missingShop = await request('/mobileapp/v1/shop/addRating', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        shopId: '00000000-0000-4000-8000-000000000000',
-        foodQualityRating: 5,
-        priceFairRating: 4,
-        interiorRating: 3,
-      }),
-    });
-    check('mobile addRating for a missing shop returns 404', missingShop.status === 404);
-
-    const addRating = await request('/mobileapp/v1/shop/addRating', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        shopId: mobileShopId,
-        foodQualityRating: 5,
-        priceFairRating: 4,
-        interiorRating: 3,
-        isValidated: true,
-      }),
-    });
-    const ratingBody = await readJson(addRating);
-    const mobileRatingId = ratingBody?.data?.id;
-    check(
-      'POST /mobileapp/v1/shop/addRating returns 201 and ignores the isValidated field',
-      addRating.status === 201 &&
-        typeof mobileRatingId === 'string' &&
-        !('isValidated' in ratingBody.data),
-    );
-
-    const storedRating = await readJson(await request(`/api/v1/ratings/${mobileRatingId}`));
-    check(
-      'rating created via mobile app is stored pending (is_validated = false)',
-      storedRating.data.isValidated === false,
+      'GET /api/v1/shops/:id is the single-shop endpoint with ratingsList',
+      getSingle.data.id === plainShopId && Array.isArray(getSingle.data.ratingsList),
     );
   }
 
@@ -337,7 +279,7 @@ async function main() {
     const shopsHtml = await shopsPage.text();
     check(
       'admin shops list shows pending shops with actions',
-      shopsPage.status === 200 && shopsHtml.includes('E2E Photo Shop') && shopsHtml.includes('Validate'),
+      shopsPage.status === 200 && shopsHtml.includes(PHOTO_SHOP_NAME) && shopsHtml.includes('Validate'),
     );
 
     const noCsrf = await request(`/admin/ratings/${ratingId}/validate`, {
@@ -365,11 +307,17 @@ async function main() {
     );
     check(
       'validated rating is now visible on the public endpoint',
-      publicRatings.data.length === 1 && publicRatings.data[0].isValidated === true,
+      publicRatings.data.length === 1 && publicRatings.data[0].id === ratingId,
+    );
+
+    const detailWithRatings = await readJson(await request(`/api/v1/shops/${plainShopId}`));
+    check(
+      'shop detail includes the validated rating in ratingsList',
+      detailWithRatings.data.ratingsList.some((rating) => rating.id === ratingId),
     );
 
     const ratingDetail = await readJson(await request(`/api/v1/ratings/${ratingId}`));
-    check('GET /api/v1/ratings/:id returns the validated rating', ratingDetail.data.isValidated === true);
+    check('GET /api/v1/ratings/:id returns the validated rating', ratingDetail.data.id === ratingId);
 
     const validateShop = await request(`/admin/shops/${shopWithPhotoId}/validate`, {
       method: 'POST',
@@ -379,11 +327,32 @@ async function main() {
     check('admin validates the shop (302 redirect)', validateShop.status === 302);
 
     const validatedList = await readJson(
-      await request('/api/v1/shops?isValidated=true&search=E2E'),
+      await request(`/api/v1/shops?search=${encodeURIComponent(`E2E ${RUN}`)}`),
     );
     check(
-      'validated shop appears in isValidated=true listing',
-      validatedList.data.some((shop) => shop.id === shopWithPhotoId),
+      'validated shop appears in the public listing, pending ones stay hidden',
+      validatedList.data.some((shop) => shop.id === shopWithPhotoId) &&
+        validatedList.data.every((shop) => shop.id !== plainShopId),
+    );
+
+    const nearName = encodeURIComponent(PHOTO_SHOP_NAME);
+    const near = await readJson(
+      await request(`/api/v1/shops?lat=52.52&lng=13.405&radiusKm=1&search=${nearName}`),
+    );
+    check(
+      'GET /api/v1/shops geo filter returns the validated shop with a distance',
+      near.data.length === 1 && near.data[0].id === shopWithPhotoId && typeof near.data[0].distanceKm === 'number',
+    );
+
+    const far = await readJson(
+      await request(`/api/v1/shops?lat=0&lng=0&radiusKm=1&search=${nearName}`),
+    );
+    check('GET /api/v1/shops geo filter excludes shops outside radius', far.data.length === 0);
+
+    const allShops = await readJson(await request('/api/v1/shops/all'));
+    check(
+      'GET /api/v1/shops/all includes the validated shop',
+      allShops.data.some((shop) => shop.id === shopWithPhotoId),
     );
 
     const editPage = await request(`/admin/shops/${shopWithPhotoId}/edit`);

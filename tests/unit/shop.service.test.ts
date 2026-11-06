@@ -84,6 +84,41 @@ describe('ShopService', () => {
     expect(sql).toContain('is_validated = TRUE');
     expect(params).toEqual(['shop-1']);
   });
+
+  it('listAll fetches only validated shops in one query without pagination', async () => {
+    const shops = [
+      {
+        id: 'shop-1',
+        name: 'Kebab King',
+        latitude: 52.52,
+        longitude: 13.405,
+        rating: '4.33',
+        countOfRates: 3,
+        photo: null,
+        photoMimeType: null,
+        isValidated: true,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-02T00:00:00Z'),
+      },
+    ];
+    const getMany = vi.fn(async () => shops);
+    const where = vi.fn().mockReturnThis();
+    const queryBuilder = {
+      select: vi.fn().mockReturnThis(),
+      where,
+      orderBy: vi.fn().mockReturnThis(),
+      getMany,
+    };
+    const repo = createFakeRepo({ createQueryBuilder: vi.fn(() => queryBuilder) });
+    const service = new ShopService(createFakeDataSource(repo));
+
+    const result = await service.listAll();
+
+    expect(result).toBe(shops);
+    expect(where).toHaveBeenCalledWith('shop.isValidated = :isValidated', { isValidated: true });
+    expect(queryBuilder.orderBy).toHaveBeenCalledWith('shop.createdAt', 'DESC');
+    expect(getMany).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('toShopResponse', () => {
@@ -108,7 +143,7 @@ describe('toShopResponse', () => {
     expect(response.hasPhoto).toBe(true);
     expect(response.photoUrl).toBe('/api/v1/shops/shop-1/photo');
     expect(response.geo).toEqual({ latitude: 52.52, longitude: 13.405 });
-    expect(response.isValidated).toBe(true);
+    expect('isValidated' in response).toBe(false);
   });
 
   it('handles null aggregates without a photo', () => {

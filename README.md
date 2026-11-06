@@ -15,9 +15,11 @@ admin panel for content moderation (validating shops and user ratings).
 ```
 src/                          Backend (Node.js + TypeScript)
   server.ts                   Entry point (graceful shutdown, DB retry)
-  app.ts                      Express app factory (security headers, sessions, routes)
+  app.ts                      Express app factory + composition root
+                              (creates services once, wires all routers)
   config/env.ts               Zod-validated environment configuration
-  api/v1.router.ts            Composition root of the public /api/v1 router
+  api/                        HTTP composition
+    v1.router.ts              Composition root of the public /api/v1 router
   database/
     data-source.ts            TypeORM data source (snake_case naming strategy)
     entities/                 Shop, Rating, AdminUser entities (one class per file)
@@ -29,10 +31,12 @@ src/                          Backend (Node.js + TypeScript)
   utils/                      Shared helpers & models (one type per file):
                               AppError, pagination, uuid checks, uploaded photo, ...
   modules/                    Features (package-by-feature)
-    shop/                     Shop service, mapper, routes + dto/ (requests/responses)
-    rating/                   Rating service, controller, mapper + dto/
-    mobileapp/                Mobile app API (/mobileapp/v1), mapper + dto/
-    admin/                    Admin panel backend: auth, CSRF, controllers + helpers
+    shop/                     Shop service (returns entities), HTTP controller,
+                              routes, public mappers + dto/
+    rating/                   Rating service, HTTP controller (nested + flat
+                              create), public mappers + dto/
+    admin/                    Admin panel (the ONLY place with login/moderation):
+                              session auth, CSRF, admin view mappers, controllers
     health/                   GET /health
 frontend/                     Admin panel UI (served by the backend)
   views/                      EJS templates (layout partials, lists, forms)
@@ -40,6 +44,19 @@ frontend/                     Admin panel UI (served by the backend)
 tests/unit/                   Vitest unit tests (DTOs, services, utils)
 scripts/e2e-smoke.mjs         End-to-end smoke test against a running server
 ```
+
+### Layering rules (who is allowed to see what)
+
+- **Services** return domain entities (plus pagination) — they know nothing
+  about JSON shapes.
+- **Public API** (`/api/v1`, consumed by the Android app): mappers in
+  `shop.mapper.ts` / `rating.mapper.ts` produce responses *without* the
+  moderation flag, and all public listings only ever include **validated**
+  content. Anyone may submit shops/ratings — they are stored as pending.
+- **Admin panel** (`/admin`, session + CSRF protected): `admin.mapper.ts`
+  produces view models *with* `isValidated`, and the admin controllers see
+  pending content. Login, validate/unvalidate and delete exist **only** here —
+  the public API has no admin operations at all.
 
 ## Getting started
 
@@ -117,13 +134,19 @@ Base URL: `/api/v1`. All responses are JSON (`{ data }` on success,
 `{ error: { code, message, details? } }` on failure). Photos are stored as
 `bytea` blobs and served through dedicated photo endpoints with ETag caching.
 
+Public responses never contain the moderation flag `isValidated`, and public
+listings only ever include **validated** content — pending items are visible
+to admins (in `/admin`) and, for the submit-then-view flow, when fetched
+directly by their unguessable UUID id.
+
 ### Shops
 
 | Method | Path                       | Description                                                        |
 | ------ | -------------------------- | ------------------------------------------------------------------ |
-| POST   | `/api/v1/shops`            | Create a shop. JSON or `multipart/form-data` with optional `photo`. |
-| GET    | `/api/v1/shops`            | List shops (see query params below).                                |
-| GET    | `/api/v1/shops/:id`        | Shop details.                                                       |
+| POST   | `/api/v1/shops`            | Submit a shop (stored **pending**). JSON or `multipart/form-data` with optional `photo`. |
+| GET    | `/api/v1/shops`            | List **validated** shops (see query params below).                  |
+| GET    | `/api/v1/shops/all`        | Every **validated** shop in one response, no pagination.            |
+| GET    | `/api/v1/shops/:id`        | Shop detail, includes `ratingsList` (validated ratings, newest first). |
 | GET    | `/api/v1/shops/:id/photo`  | Shop photo bytes (404 when absent).                                 |
 | POST   | `/api/v1/shops/:id/ratings`| Submit a rating for a shop (always created as **pending**).         |
 | GET    | `/api/v1/shops/:id/ratings`| Validated ratings of a shop (paginated).                            |
@@ -141,7 +164,6 @@ Base URL: `/api/v1`. All responses are JSON (`{ data }` on success,
 `GET /api/v1/shops` query params:
 
 - `page`, `limit` (default 20, max 100)
-- `isValidated` — `true`/`false` filter
 - `search` — case-insensitive name search
 - `lat`, `lng`, `radiusKm` — great-circle distance filter; each result then
   includes `distanceKm`, sorted nearest first
@@ -168,8 +190,11 @@ Multipart requests may include an optional `photo` image file (max 5 MB).
 
 ### Validation workflow (moderation)
 
-1. Shops and ratings created through the API are stored with `is_validated = false`.
-2. An admin opens **/admin**, reviews pending items and clicks **Validate**.
+1. Shops and ratings created through the public API are stored with
+   `is_validated = false` and are invisible in all public listings.
+2. An admin opens **/admin** (admin session required), reviews pending items
+   and clicks **Validate**. Validation endpoints exist *only* in the admin
+   panel, protected by session + CSRF.
 3. When a rating is validated (or un-validated / edited / deleted), the parent
    shop's `rating` (average of the three subscores over validated ratings) and
    `count_of_rates` are recomputed automatically.

@@ -1,3 +1,7 @@
+/**
+ * Public shop payload (API v1). The moderation flag is internal: the public
+ * API never exposes `isValidated` — only the admin panel sees it.
+ */
 export interface ShopResponse {
   id: string;
   name: string;
@@ -6,7 +10,6 @@ export interface ShopResponse {
   countOfRates: number | null;
   hasPhoto: boolean;
   photoUrl: string | null;
-  isValidated: boolean;
   createdAt: string;
   updatedAt: string;
   distanceKm?: number;

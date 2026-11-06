@@ -1,17 +1,22 @@
 import { Request, Response, Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler';
+import { apiWriteLimiter } from '../../middleware/rate-limit';
 import { optionalPhotoUpload } from '../../middleware/upload';
 import { toUploadedPhoto } from '../../utils/photo/uploaded-photo';
-import { apiWriteLimiter } from '../../middleware/rate-limit';
 import { parseAndValidate } from '../../middleware/validate';
-import { AppError } from '../../utils/error/app-error';
 import { requireUuid } from '../../utils/string/uuid';
 import { sendPhoto } from '../../utils/photo/send-photo';
+import { AppError } from '../../utils/error/app-error';
 import { CreateRatingRequest } from './dto/create-rating-request.dto';
 import { ListRatingsQuery } from './dto/list-ratings-query.dto';
 import { RatingService } from './rating.service';
 import { toRatingResponse } from './rating.mapper';
 
+/**
+ * Public rating endpoints. Mounted at /api/v1/shops/:shopId/ratings (nested)
+ * and /api/v1/ratings (lookup by id). Every submission is stored as pending;
+ * only admins can change moderation state.
+ */
 export class RatingController {
   /** Mounted at /shops/:shopId/ratings (mergeParams gives access to shopId). */
   public readonly nestedRouter: Router;
@@ -29,7 +34,11 @@ export class RatingController {
       asyncHandler(async (req: Request, res: Response) => {
         requireUuid(req.params.shopId, 'Shop');
         const dto = await parseAndValidate(CreateRatingRequest, req.body);
-        const rating = await this.ratings.createForShop(req.params.shopId, dto, toUploadedPhoto(req.file));
+        const rating = await this.ratings.createForShop(
+          req.params.shopId,
+          dto,
+          toUploadedPhoto(req.file),
+        );
         res.status(201).json({ data: toRatingResponse(rating) });
       }),
     );
@@ -39,13 +48,16 @@ export class RatingController {
       asyncHandler(async (req: Request, res: Response) => {
         requireUuid(req.params.shopId, 'Shop');
         const query = await parseAndValidate(ListRatingsQuery, req.query);
-        // Public consumers only see validated ratings by default.
+        // Public consumers only see validated ratings.
         const result = await this.ratings.listByShop(req.params.shopId, {
           page: query.page,
           limit: query.limit,
           isValidated: true,
         });
-        res.json(result);
+        res.json({
+          data: result.data.map((rating) => toRatingResponse(rating)),
+          pagination: result.pagination,
+        });
       }),
     );
 

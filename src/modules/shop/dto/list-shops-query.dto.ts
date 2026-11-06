@@ -1,16 +1,10 @@
-import { Transform, Type } from 'class-transformer';
-import {
-  IsBoolean,
-  IsInt,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Max,
-  MaxLength,
-  Min,
-} from 'class-validator';
-import { booleanTransform } from '../../../middleware/boolean-transform';
+import { Type } from 'class-transformer';
+import { IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
+/**
+ * Public shop listing filters. Validation status is not a public concern:
+ * the route always lists validated shops only.
+ */
 export class ListShopsQuery {
   @IsOptional()
   @Type(() => Number)
@@ -24,11 +18,6 @@ export class ListShopsQuery {
   @Min(1)
   @Max(100)
   limit?: number;
-
-  @IsOptional()
-  @Transform(booleanTransform)
-  @IsBoolean()
-  isValidated?: boolean;
 
   @IsOptional()
   @IsString()

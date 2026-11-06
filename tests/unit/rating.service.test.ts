@@ -85,7 +85,7 @@ describe('toRatingResponse', () => {
     expect(response.overallRating).toBe(4.33);
     expect(response.hasPhoto).toBe(false);
     expect(response.photoUrl).toBeNull();
-    expect(response.isValidated).toBe(false);
+    expect('isValidated' in response).toBe(false);
   });
 
   it('includes the shop name when provided', () => {

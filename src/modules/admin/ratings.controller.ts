@@ -14,14 +14,10 @@ import { flash } from './flash';
 import { renderAdmin } from './render-admin';
 import { safeRedirectPath } from './safe-redirect-path';
 import { verifyCsrf } from './csrf';
+import { toAdminRatingResponse } from './admin.mapper';
 
 function parseStatus(value: unknown): 'all' | 'pending' | 'validated' {
   return value === 'pending' || value === 'validated' ? value : 'all';
-}
-
-/** Recomputes the parent shop aggregates after any rating mutation. */
-async function recompute(shops: ShopService, shopId: string): Promise<void> {
-  await shops.recomputeAggregates(shopId);
 }
 
 export function registerAdminRatingRoutes(
@@ -52,7 +48,7 @@ export function registerAdminRatingRoutes(
         status,
         shopId,
         search,
-        ratings: result.data,
+        ratings: result.data.map((item) => toAdminRatingResponse(item.rating, item.shopName)),
         pagination: buildPaginationVm(req, result.pagination),
       });
     }),
@@ -83,7 +79,7 @@ export function registerAdminRatingRoutes(
       try {
         const dto = await parseAndValidate(AdminCreateRatingRequest, req.body);
         const rating = await ratings.createAsAdmin(dto, toUploadedPhoto(req.file));
-        if (rating.isValidated) await recompute(shops, rating.shopId);
+        if (rating.isValidated) await shops.recomputeAggregates(rating.shopId);
         flash(req, 'success', 'Rating created.');
         res.redirect(`/admin/shops/${rating.shopId}`);
       } catch (error) {
@@ -143,7 +139,7 @@ export function registerAdminRatingRoutes(
           photo: toUploadedPhoto(req.file),
           removePhoto,
         });
-        await recompute(shops, rating.shopId);
+        await shops.recomputeAggregates(rating.shopId);
         flash(req, 'success', 'Rating updated and shop aggregates recomputed.');
         res.redirect(safeRedirectPath(req.body?.redirectTo, '/admin/ratings'));
       } catch (error) {
@@ -175,7 +171,7 @@ export function registerAdminRatingRoutes(
   const setRatingValidation = (isValidated: boolean) => {
     return asyncHandler(async (req: Request, res: Response) => {
       const rating = await ratings.setValidated(req.params.id, isValidated);
-      await recompute(shops, rating.shopId);
+      await shops.recomputeAggregates(rating.shopId);
       flash(
         req,
         'success',
@@ -193,7 +189,7 @@ export function registerAdminRatingRoutes(
     asyncHandler(async (req: Request, res: Response) => {
       const rating = await ratings.getById(req.params.id);
       await ratings.remove(rating.id);
-      await recompute(shops, rating.shopId);
+      await shops.recomputeAggregates(rating.shopId);
       flash(req, 'success', 'Rating deleted and shop aggregates recomputed.');
       res.redirect(safeRedirectPath(req.body?.redirectTo, '/admin/ratings'));
     }),

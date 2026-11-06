@@ -2,6 +2,10 @@ import { Rating } from '../../database/entities/rating.entity';
 import { round2 } from '../../utils/math/math';
 import { RatingResponse } from './dto/rating-response.dto';
 
+/**
+ * Public rating payload. The moderation flag (isValidated) is deliberately
+ * absent — moderation state is internal; only admins see it (admin.mapper).
+ */
 export function toRatingResponse(rating: Rating, shopName?: string): RatingResponse {
   const hasPhoto = Boolean(rating.photo ?? null) || Boolean(rating.photoMimeType ?? null);
   return {
@@ -17,7 +21,6 @@ export function toRatingResponse(rating: Rating, shopName?: string): RatingRespo
     notes: rating.notes ?? null,
     hasPhoto,
     photoUrl: hasPhoto ? `/api/v1/ratings/${rating.id}/photo` : null,
-    isValidated: rating.isValidated,
     createdAt:
       rating.createdAt instanceof Date ? rating.createdAt.toISOString() : String(rating.createdAt),
     updatedAt:
