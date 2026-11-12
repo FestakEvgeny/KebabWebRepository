@@ -1,6 +1,8 @@
+import * as bcrypt from 'bcryptjs';
 import { DataSource } from 'typeorm';
 import { env } from '../../config/env';
 import { AuthToken } from '../../database/entities/auth-token.entity';
+import { User } from '../../database/entities/user.entity';
 import { AppError } from '../../utils/error/app-error';
 import { randomToken } from '../../utils/math/crypto';
 
@@ -8,34 +10,64 @@ import { randomToken } from '../../utils/math/crypto';
 const ACCESS_TOKEN_BYTES = 32;
 const REFRESH_TOKEN_BYTES = 48;
 
+/** bcrypt cost; matches the admin panel seeding. */
+const PASSWORD_HASH_ROUNDS = 12;
+
+// Constant hash used to equalise response times when the email is unknown.
+const DUMMY_HASH = bcrypt.hashSync('timing-equalizer', PASSWORD_HASH_ROUNDS);
+
 /** 256-bit random tokens will never collide in practice; retries guard the unique constraints. */
 const MAX_TOKEN_ATTEMPTS = 5;
 const UNIQUE_VIOLATION = '23505';
 
 export class OAuthService {
-  constructor(private readonly dataSource: DataSource) { }
+  constructor(private readonly dataSource: DataSource) {}
 
   private get repository() {
     return this.dataSource.getRepository(AuthToken);
   }
 
-  /** Issues a brand-new token pair (GET /oauth/token). */
+  private get users() {
+    return this.dataSource.getRepository(User);
+  }
+
   async issueTokens(now = new Date()): Promise<AuthToken> {
-    for (let attempt = 1; ; attempt += 1) {
-      const record = this.repository.create({
-        accessToken: randomToken(ACCESS_TOKEN_BYTES),
-        refreshToken: randomToken(REFRESH_TOKEN_BYTES),
-        accessTokenExpiresAt: addSeconds(now, env.ACCESS_TOKEN_TTL_SECONDS),
-        refreshTokenExpiresAt: addSeconds(now, env.REFRESH_TOKEN_TTL_SECONDS),
-      });
-      try {
-        return await this.repository.save(record);
-      } catch (error) {
-        if (!isUniqueViolation(error) || attempt >= MAX_TOKEN_ATTEMPTS) throw error;
-      }
+    return this.createTokenPair({ userId: null, isAuthorized: false }, now);
+  }
+
+  async register(email: string, password: string): Promise<User> {
+    const normalized = normalizeEmail(email);
+    if (await this.users.findOneBy({ email: normalized })) {
+      throw emailAlreadyRegistered(normalized);
+    }
+
+    const user = this.users.create({
+      email: normalized,
+      passwordHash: await bcrypt.hash(password, PASSWORD_HASH_ROUNDS),
+    });
+    try {
+      return await this.users.save(user);
+    } catch (error) {
+      if (isUniqueViolation(error)) throw emailAlreadyRegistered(normalized);
+      throw error;
     }
   }
 
+  /** Verifies credentials and issues a token pair bound to the user (POST /oauth/login). */
+  async login(email: string, password: string, now = new Date()): Promise<AuthToken> {
+    const user = await this.users.findOneBy({ email: normalizeEmail(email) });
+    // Comparing against a dummy hash keeps the response time flat for unknown emails.
+    const passwordOk = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
+    if (!user || !passwordOk) {
+      throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password.');
+    }
+    return this.createTokenPair({ userId: user.id, isAuthorized: true }, now);
+  }
+
+  async logout(accessToken: string): Promise<boolean> {
+    const result = await this.repository.delete({ accessToken });
+    return (result.affected ?? 0) > 0;
+  }
 
   async refreshAccessToken(refreshToken: string, now = new Date()): Promise<AuthToken> {
     const record = await this.repository.findOneBy({ refreshToken });
@@ -55,9 +87,9 @@ export class OAuthService {
       );
     }
 
-    var accessTokenExpiresIs = addSeconds(now, env.ACCESS_TOKEN_TTL_SECONDS)
+    let accessTokenExpiresIs = addSeconds(now, env.ACCESS_TOKEN_TTL_SECONDS);
     if (accessTokenExpiresIs.getTime() > record.refreshTokenExpiresAt.getTime()) {
-      accessTokenExpiresIs = record.refreshTokenExpiresAt
+      accessTokenExpiresIs = record.refreshTokenExpiresAt;
     }
 
     for (let attempt = 1; ; attempt += 1) {
@@ -71,12 +103,39 @@ export class OAuthService {
     }
   }
 
-  /** Resolves an access token for the Bearer auth middleware; null when unknown or expired. */
   async findActiveByAccessToken(accessToken: string, now = new Date()): Promise<AuthToken | null> {
     const record = await this.repository.findOneBy({ accessToken });
     if (!record) return null;
     return record.accessTokenExpiresAt.getTime() > now.getTime() ? record : null;
   }
+
+  private async createTokenPair(
+    owner: Pick<AuthToken, 'userId' | 'isAuthorized'>,
+    now: Date,
+  ): Promise<AuthToken> {
+    for (let attempt = 1; ; attempt += 1) {
+      const record = this.repository.create({
+        ...owner,
+        accessToken: randomToken(ACCESS_TOKEN_BYTES),
+        refreshToken: randomToken(REFRESH_TOKEN_BYTES),
+        accessTokenExpiresAt: addSeconds(now, env.ACCESS_TOKEN_TTL_SECONDS),
+        refreshTokenExpiresAt: addSeconds(now, env.REFRESH_TOKEN_TTL_SECONDS),
+      });
+      try {
+        return await this.repository.save(record);
+      } catch (error) {
+        if (!isUniqueViolation(error) || attempt >= MAX_TOKEN_ATTEMPTS) throw error;
+      }
+    }
+  }
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function emailAlreadyRegistered(email: string): AppError {
+  return new AppError(409, 'EMAIL_ALREADY_REGISTERED', `Email ${email} is already registered.`);
 }
 
 function addSeconds(from: Date, seconds: number): Date {

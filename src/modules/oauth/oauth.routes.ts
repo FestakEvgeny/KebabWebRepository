@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { apiWriteLimiter } from '../../middleware/rate-limit';
+import { apiLoginLimiter } from '../../middleware/api-login-limiter';
+import { apiWriteLimiter } from '../../middleware/api-write-limiter';
 import { OAuthController } from './oauth.controller';
 
 export function createOAuthRouter(oauthController: OAuthController): Router {
@@ -7,6 +8,9 @@ export function createOAuthRouter(oauthController: OAuthController): Router {
 
   router.get('/token', apiWriteLimiter, oauthController.issue);
   router.post('/token', apiWriteLimiter, oauthController.refresh);
+  router.post('/register', apiWriteLimiter, oauthController.register);
+  router.post('/login', apiLoginLimiter, oauthController.login);
+  router.post('/logout', apiWriteLimiter, oauthController.logout);
 
   return router;
 }

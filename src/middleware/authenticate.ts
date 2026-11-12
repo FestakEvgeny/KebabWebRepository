@@ -1,8 +1,8 @@
 import { NextFunction, Request, RequestHandler, Response } from 'express';
 import { OAuthService } from '../modules/oauth/oauth.service';
 import { AppError } from '../utils/error/app-error';
+import { extractBearerToken } from '../utils/string/extract-bearer-token';
 import { asyncHandler } from './async-handler';
-
 
 export function createAuthenticate(oauthService: OAuthService): RequestHandler {
   return asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
@@ -27,11 +27,4 @@ export function createAuthenticate(oauthService: OAuthService): RequestHandler {
     req.auth = record;
     next();
   });
-}
-
-/** Reads the token out of an `Authorization: Bearer <token>` header (the scheme is case-insensitive per RFC 6750). */
-export function extractBearerToken(header: unknown): string | null {
-  if (typeof header !== 'string') return null;
-  const match = /^Bearer[ \t]+([^\s]+)$/i.exec(header);
-  return match ? match[1] : null;
 }

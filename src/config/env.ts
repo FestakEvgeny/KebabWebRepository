@@ -11,10 +11,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   CORS_ORIGIN: z.string().default('*'),
 
-  DATABASE_URL: z
-    .string()
-    .min(1)
-    .default('postgres://kebab:kebab@localhost:5432/kebab_guide'),
+  DATABASE_URL: z.string().min(1).default('postgres://kebab:kebab@localhost:5432/kebab_guide'),
   DATABASE_SSL: booleanFlag,
 
   RUN_MIGRATIONS_ON_START: booleanFlag.default('true'),
@@ -26,11 +23,23 @@ const envSchema = z.object({
 
   MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(20).default(5),
 
-  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(15 * 60 * 1000),
+  RATE_LIMIT_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .default(15 * 60 * 1000),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().min(1).default(100),
 
-  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(1).default(24 * 60 * 60),
-  REFRESH_TOKEN_TTL_SECONDS: z.coerce.number().int().min(1).default(30 * 24 * 60 * 60),
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(24 * 60 * 60),
+  REFRESH_TOKEN_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(30 * 24 * 60 * 60),
 });
 
 const parsed = envSchema.safeParse(process.env);

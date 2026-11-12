@@ -138,6 +138,106 @@ async function main() {
       'GET /api/v1/shops with an invalid token returns 401 INVALID_ACCESS_TOKEN',
       staleToken.status === 401,
     );
+
+    const anonymousBody = await readJson(await request('/api/v1/oauth/token'));
+    check(
+      'anonymous GET /api/v1/oauth/token pairs report isAuthorized=false',
+      anonymousBody.data.isAuthorized === false,
+    );
+  }
+
+  console.log('\nRegister / login / logout (public API)');
+  {
+    const email = `e2e-${RUN}@example.com`;
+    const registerBody = JSON.stringify({ email, password: 'e2e-password-123' });
+
+    const invalidRegister = await request('/api/v1/oauth/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'not-an-email', password: 'e2e-password-123' }),
+    });
+    check(
+      'POST /api/v1/oauth/register with a malformed email returns 400 VALIDATION_ERROR',
+      invalidRegister.status === 400 &&
+        (await readJson(invalidRegister)).error.code === 'VALIDATION_ERROR',
+    );
+
+    const registered = await request('/api/v1/oauth/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: registerBody,
+    });
+    const registeredData = (await readJson(registered))?.data;
+    check(
+      'POST /api/v1/oauth/register returns 201 with the user but no password and no tokens',
+      registered.status === 201 &&
+        registeredData?.email === email &&
+        !('password' in registeredData) &&
+        !('passwordHash' in registeredData) &&
+        !('accessToken' in registeredData),
+    );
+
+    const duplicate = await request('/api/v1/oauth/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: registerBody,
+    });
+    check(
+      'registering the same email again returns 409 EMAIL_ALREADY_REGISTERED',
+      duplicate.status === 409 &&
+        (await readJson(duplicate)).error.code === 'EMAIL_ALREADY_REGISTERED',
+    );
+
+    const form = new URLSearchParams({ email, password: 'wrong-password' }).toString();
+    const badLogin = await request('/api/v1/oauth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: form,
+    });
+    check(
+      'POST /api/v1/oauth/login with a wrong password returns 401 INVALID_CREDENTIALS',
+      badLogin.status === 401 &&
+        (await readJson(badLogin)).error.code === 'INVALID_CREDENTIALS',
+    );
+
+    const login = await request('/api/v1/oauth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ email, password: 'e2e-password-123' }).toString(),
+    });
+    const loginBody = await readJson(login);
+    const loginAccess = loginBody?.data?.accessToken;
+    check(
+      'POST /api/v1/oauth/login (x-www-form-urlencoded) returns 201 with an authorized pair',
+      login.status === 201 &&
+        typeof loginAccess === 'string' &&
+        loginBody.data.isAuthorized === true,
+    );
+
+    const withLoginToken = await fetch(`${BASE_URL}/api/v1/shops`, {
+      headers: { authorization: `Bearer ${loginAccess}` },
+    });
+    check('the login access token works on protected endpoints', withLoginToken.status === 200);
+
+    const logoutWithoutToken = await fetch(`${BASE_URL}/api/v1/oauth/logout`, { method: 'POST' });
+    check('POST /api/v1/oauth/logout without a Bearer token returns 401', logoutWithoutToken.status === 401);
+
+    const logout = await fetch(`${BASE_URL}/api/v1/oauth/logout`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${loginAccess}` },
+    });
+    check('POST /api/v1/oauth/logout deletes the session record (204)', logout.status === 204);
+
+    const afterLogout = await fetch(`${BASE_URL}/api/v1/shops`, {
+      headers: { authorization: `Bearer ${loginAccess}` },
+    });
+    check('the revoked access token no longer works (401)', afterLogout.status === 401);
+
+    const logoutAgain = await fetch(`${BASE_URL}/api/v1/oauth/logout`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${loginAccess}` },
+    });
+    check('logging out twice returns 401 (record already deleted)', logoutAgain.status === 401);
   }
 
   console.log('\nShop creation (public API)');

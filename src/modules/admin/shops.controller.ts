@@ -1,6 +1,6 @@
 import { Request, Response, Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler';
-import { optionalPhotoUpload } from '../../middleware/upload';
+import { optionalPhotoUpload } from '../../middleware/optional-photo-upload';
 import { toUploadedPhoto } from '../../utils/photo/uploaded-photo';
 import { parseAndValidate } from '../../middleware/validate';
 import { AppError } from '../../utils/error/app-error';

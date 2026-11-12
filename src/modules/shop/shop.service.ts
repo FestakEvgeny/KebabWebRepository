@@ -5,6 +5,7 @@ import { CreateShopRequest } from './dto/create-shop-request.dto';
 import { UpdateShopRequest } from './dto/update-shop-request.dto';
 import { PaginatedList } from '../../utils/pagination/paginated-list';
 import { ShopListFilters } from './shop-list-filters';
+import { ShopListItem } from './shop-list-item';
 import { ShopStats } from './shop-stats';
 import { UploadedPhoto } from '../../utils/photo/uploaded-photo';
 import { PhotoUpdate } from '../../utils/photo/photo-update';
@@ -29,9 +30,6 @@ const SHOP_LIST_COLUMNS = [
 ];
 
 const EARTH_RADIUS_KM = 6371;
-
-/** Shop list item; `distanceKm` is attached when a geo filter was applied. */
-export type ShopListItem = Shop & { distanceKm?: number };
 
 export class ShopService {
   private readonly repo: Repository<Shop>;
@@ -98,8 +96,10 @@ export class ShopService {
     }
 
     const useDistance =
-      typeof filters.lat === 'number' && Number.isFinite(filters.lat) &&
-      typeof filters.lng === 'number' && Number.isFinite(filters.lng);
+      typeof filters.lat === 'number' &&
+      Number.isFinite(filters.lat) &&
+      typeof filters.lng === 'number' &&
+      Number.isFinite(filters.lng);
 
     if (useDistance) {
       const distance = distanceExpression(filters.lat as number, filters.lng as number);

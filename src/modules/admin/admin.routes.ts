@@ -1,11 +1,10 @@
 import * as bcrypt from 'bcryptjs';
 import { Request, Response, Router } from 'express';
-import { DataSource, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { AdminUser } from '../../database/entities/admin-user.entity';
 import { asyncHandler } from '../../middleware/async-handler';
-import { adminLoginLimiter } from '../../middleware/rate-limit';
-import { ShopService } from '../shop/shop.service';
-import { RatingService } from '../rating/rating.service';
+import { adminLoginLimiter } from '../../middleware/admin-login-limiter';
+import { AdminRouterDeps } from './admin-router-deps';
 import { ensureCsrfToken, verifyCsrf } from './csrf';
 import { flash } from './flash';
 import { renderAdmin } from './render-admin';
@@ -13,12 +12,6 @@ import { requireAdmin } from './require-admin';
 import { registerDashboardRoutes } from './dashboard.controller';
 import { registerAdminShopRoutes } from './shops.controller';
 import { registerAdminRatingRoutes } from './ratings.controller';
-
-export interface AdminRouterDeps {
-  dataSource: DataSource;
-  shopService: ShopService;
-  ratingService: RatingService;
-}
 
 // Constant hash used to equalise response times when the email is unknown.
 const DUMMY_HASH = bcrypt.hashSync('timing-equalizer', 12);
@@ -34,7 +27,11 @@ function regenerateSession(req: Request): Promise<void> {
  * moderation operations (validate/unvalidate shops and ratings) — every such
  * page requires an admin session, and every mutation is CSRF-protected.
  */
-export function createAdminRouter({ dataSource, shopService, ratingService }: AdminRouterDeps): Router {
+export function createAdminRouter({
+  dataSource,
+  shopService,
+  ratingService,
+}: AdminRouterDeps): Router {
   const router = Router();
   const shops = shopService;
   const ratings = ratingService;
@@ -67,10 +64,7 @@ export function createAdminRouter({ dataSource, shopService, ratingService }: Ad
       }
 
       const user = await adminRepo.findOneBy({ email: email.trim().toLowerCase() });
-      const passwordOk = await bcrypt.compare(
-        password,
-        user?.passwordHash ?? DUMMY_HASH,
-      );
+      const passwordOk = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
 
       if (!user || !passwordOk) {
         flash(req, 'error', 'Invalid email or password.');

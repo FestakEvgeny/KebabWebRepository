@@ -1,7 +1,7 @@
 import { Request, Response, Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler';
-import { apiWriteLimiter } from '../../middleware/rate-limit';
-import { optionalPhotoUpload } from '../../middleware/upload';
+import { apiWriteLimiter } from '../../middleware/api-write-limiter';
+import { optionalPhotoUpload } from '../../middleware/optional-photo-upload';
 import { toUploadedPhoto } from '../../utils/photo/uploaded-photo';
 import { parseAndValidate } from '../../middleware/validate';
 import { requireUuid } from '../../utils/string/uuid';

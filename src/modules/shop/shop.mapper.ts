@@ -18,8 +18,10 @@ export function toShopResponse(shop: Shop, distanceKm?: number): ShopResponse {
     countOfRates: shop.countOfRates ?? null,
     hasPhoto,
     photoUrl: hasPhoto ? `/api/v1/shops/${shop.id}/photo` : null,
-    createdAt: shop.createdAt instanceof Date ? shop.createdAt.toISOString() : String(shop.createdAt),
-    updatedAt: shop.updatedAt instanceof Date ? shop.updatedAt.toISOString() : String(shop.updatedAt),
+    createdAt:
+      shop.createdAt instanceof Date ? shop.createdAt.toISOString() : String(shop.createdAt),
+    updatedAt:
+      shop.updatedAt instanceof Date ? shop.updatedAt.toISOString() : String(shop.updatedAt),
     ...(distanceKm !== undefined ? { distanceKm } : {}),
   };
 }

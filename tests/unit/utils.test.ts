@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parsePagination } from '../../src/utils/pagination/parse-pagination';
 import { safeEqual, randomToken } from '../../src/utils/math/crypto';
-import { isAllowedImageMime } from '../../src/middleware/upload';
+import { isAllowedImageMime } from '../../src/utils/photo/is-allowed-image-mime';
 import { isUuid } from '../../src/utils/string/uuid';
 
 describe('parsePagination', () => {

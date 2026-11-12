@@ -22,7 +22,8 @@ src/                          Backend (Node.js + TypeScript)
     v1.router.ts              Composition root of the public /api/v1 router
   database/
     data-source.ts            TypeORM data source (snake_case naming strategy)
-    entities/                 Shop, Rating, AdminUser entities (one class per file)
+    entities/                 Shop, Rating, AdminUser, AuthToken, User entities
+                              (one class per file)
     migrations/               SQL migrations (tables, indexes, CHECK constraints)
     naming-strategy.ts        camelCase property -> snake_case column mapping
     migrate.ts / seed.ts      Migration CLI and idempotent seed script
@@ -32,7 +33,8 @@ src/                          Backend (Node.js + TypeScript)
                               AppError, pagination, uuid checks, uploaded photo, ...
   modules/                    Features (package-by-feature)
     oauth/                    OAuth token service (access + refresh token pairs),
-                              token controller & routes, bearer auth for /api/v1
+                              register/login/logout, token controller & routes,
+                              bearer auth for /api/v1
     shop/                     Shop service (returns entities), HTTP controller,
                               routes, public mappers + dto/
     rating/                   Rating service, HTTP controller (nested + flat
@@ -146,16 +148,23 @@ listings only ever include **validated** content — pending items are visible
 to admins (in `/admin`) and, for the submit-then-view flow, when fetched
 directly by their unguessable UUID id.
 
-### OAuth tokens
+### OAuth tokens & accounts
 
-| Method | Path                     | Description                                                       |
-| ------ | ------------------------ | ----------------------------------------------------------------- |
-| GET    | `/api/v1/oauth/token`    | Issue a new access + refresh token pair (no auth required).        |
-| POST   | `/api/v1/oauth/token`    | Exchange a refresh token for a new access token.                   |
+| Method | Path                       | Description                                                                        |
+| ------ | -------------------------- | ---------------------------------------------------------------------------------- |
+| GET    | `/api/v1/oauth/token`      | Issue a new anonymous access + refresh token pair (no auth required).              |
+| POST   | `/api/v1/oauth/token`      | Exchange a refresh token for a new access token.                                    |
+| POST   | `/api/v1/oauth/register`   | Create a user account (`email` + `password`; JSON or form-urlencoded).             |
+| POST   | `/api/v1/oauth/login`      | Verify credentials, issue a user-bound token pair (`application/x-www-form-urlencoded`). |
+| POST   | `/api/v1/oauth/logout`     | Delete the token pair behind the `Authorization: Bearer <accessToken>` header.     |
 
 Token lifetimes are configurable: `ACCESS_TOKEN_TTL_SECONDS` (default 86400 =
 1 day) and `REFRESH_TOKEN_TTL_SECONDS` (default 2592000 = 30 days). Both
 tokens are random 256-bit values, globally unique in the `auth_table` table.
+
+Every token pair carries `isAuthorized`: `false` for anonymous pairs, `true`
+for pairs issued by a successful login (those rows also reference the
+`user_table` record).
 
 The flow:
 
@@ -169,7 +178,8 @@ The flow:
        "tokenType": "Bearer",
        "expiresIn": 86400,
        "accessExpiresAt": "2026-11-07T12:00:00.000Z",
-       "refreshExpiresAt": "2026-12-06T12:00:00.000Z"
+       "refreshExpiresAt": "2026-12-06T12:00:00.000Z",
+       "isAuthorized": false
      }
    }
    ```
@@ -180,12 +190,30 @@ The flow:
 
    `POST /api/v1/oauth/token` with body `{ "refreshToken": "…" }` — returns a
    **new access token** while keeping the same refresh token (the refresh
-   token and its expiry are never changed).
+   token and its expiry are never changed; `isAuthorized` is preserved).
 
 4. When the refresh token has expired too, the same POST deletes the whole
    `auth_table` record and returns **400** `REFRESH_TOKEN_EXPIRED` (an unknown
    refresh token returns 400 `INVALID_REFRESH_TOKEN`). The client must start
    over with GET.
+
+Account lifecycle:
+
+1. `POST /api/v1/oauth/register` stores the user (email is normalized to
+   lowercase, password kept only as a bcrypt hash) and returns 201 with
+   `{ "data": { "id", "email", "createdAt" } }` — no tokens. A duplicate
+   email returns **409** `EMAIL_ALREADY_REGISTERED`.
+
+2. `POST /api/v1/oauth/login` with `application/x-www-form-urlencoded`
+   `email` + `password` returns **201** with a fresh token pair whose
+   `isAuthorized` is `true` and whose `auth_table` row references the user.
+   Unknown email or wrong password → **401** `INVALID_CREDENTIALS` (flat
+   response time, failed attempts are rate limited).
+
+3. `POST /api/v1/oauth/logout` with `Authorization: Bearer <accessToken>`
+   deletes that `auth_table` record → **204**; afterwards the access token
+   stops working and further calls return 401. Logging out with an unknown
+   token returns **401** `INVALID_ACCESS_TOKEN`.
 
 ### Shops
 
@@ -275,11 +303,15 @@ confirmation in the browser.
   (smallint CHECK 1..5), `notes`, `photo`, `photo_mime_type`, `is_validated`,
   timestamps. Indexes on `shop_id` and `is_validated`.
 - **admin_user** — `id`, unique `email`, `password_hash`.
+- **user_table** — app accounts created via `/oauth/register`: `id`, unique
+  `email` (stored lowercase), `password_hash` (bcrypt), timestamps.
 - **admin_session** — express-session store table.
 - **auth_table** — issued OAuth token pairs: `id`, globally unique
   `access_token` and `refresh_token`, `access_token_expires_at`,
-  `refresh_token_expires_at`, timestamps. An expired refresh token deletes
-  the whole row (enforced by the refresh endpoint).
+  `refresh_token_expires_at`, `is_authorized` (true only for pairs issued by
+  a successful login), `user_id` (FK -> user_table ON DELETE CASCADE, null
+  for anonymous pairs), timestamps. An expired refresh token deletes the
+  whole row (enforced by the refresh endpoint), as does a logout.
 
 ## Security notes
 
@@ -289,7 +321,10 @@ confirmation in the browser.
 - Strict DTO validation with unknown-property stripping on every write.
 - Public API authenticated with opaque 256-bit random bearer tokens; unique
   constraints in `auth_table` guarantee no two clients share a token.
+- App passwords are only stored as bcrypt hashes (cost 12); login uses a
+  constant dummy hash to keep response times flat for unknown emails and is
+  rate limited on failed attempts.
 - Uploads limited to images, size-capped, held in memory only.
-- Rate limits: public write endpoints + token endpoints (configurable) and
-  admin login attempts.
+- Rate limits: public write endpoints + token endpoints (configurable),
+  public API login attempts and admin login attempts.
 - Production guard refuses to boot with the default `SESSION_SECRET`.

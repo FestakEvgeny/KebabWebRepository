@@ -14,7 +14,8 @@ import { createAdminRouter } from './modules/admin/admin.routes';
 import { ShopService } from './modules/shop/shop.service';
 import { RatingService } from './modules/rating/rating.service';
 import { OAuthService } from './modules/oauth/oauth.service';
-import { errorHandler, notFoundHandler } from './middleware/error-handler';
+import { errorHandler } from './middleware/error-handler';
+import { notFoundHandler } from './middleware/not-found-handler';
 
 export function createApp(dataSource: DataSource): Express {
   const app = express();
@@ -87,7 +88,10 @@ export function createApp(dataSource: DataSource): Express {
     }),
   );
 
-  app.use('/assets', express.static(path.resolve(process.cwd(), 'frontend/public'), { maxAge: '1d' }));
+  app.use(
+    '/assets',
+    express.static(path.resolve(process.cwd(), 'frontend/public'), { maxAge: '1d' }),
+  );
   app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
   app.use('/health', createHealthRouter(dataSource));

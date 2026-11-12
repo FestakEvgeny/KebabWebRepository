@@ -43,7 +43,11 @@ export class RatingService {
   }
 
   /** Creates a pending rating via the public API (is_validated always false). */
-  async createForShop(shopId: string, dto: CreateRatingRequest, photo?: UploadedPhoto): Promise<Rating> {
+  async createForShop(
+    shopId: string,
+    dto: CreateRatingRequest,
+    photo?: UploadedPhoto,
+  ): Promise<Rating> {
     const shop = await this.shopRepo.findOneBy({ id: shopId });
     if (!shop) throw AppError.notFound(`Shop with id "${shopId}" was not found.`);
 
@@ -152,7 +156,11 @@ export class RatingService {
     return { buffer: rating.photo, mimeType: rating.photoMimeType ?? 'application/octet-stream' };
   }
 
-  async update(id: string, dto: UpdateRatingRequest, photoUpdate: PhotoUpdate = {}): Promise<Rating> {
+  async update(
+    id: string,
+    dto: UpdateRatingRequest,
+    photoUpdate: PhotoUpdate = {},
+  ): Promise<Rating> {
     const rating = await this.getById(id);
     rating.foodQualityRating = dto.foodQualityRating;
     rating.priceFairRating = dto.priceFairRating;

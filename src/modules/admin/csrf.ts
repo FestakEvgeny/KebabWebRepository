@@ -12,11 +12,7 @@ export function ensureCsrfToken(req: Request): string {
 export function verifyCsrf(req: Request, res: Response, next: NextFunction): void {
   const submitted = (req.body as Record<string, unknown> | undefined)?._csrf;
   const sessionToken = req.session?.csrfToken;
-  if (
-    typeof submitted !== 'string' ||
-    !sessionToken ||
-    !safeEqual(submitted, sessionToken)
-  ) {
+  if (typeof submitted !== 'string' || !sessionToken || !safeEqual(submitted, sessionToken)) {
     res.status(403).render('admin/error', {
       title: 'Error 403',
       statusCode: 403,

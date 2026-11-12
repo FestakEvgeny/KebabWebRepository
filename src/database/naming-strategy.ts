@@ -8,10 +8,7 @@ function snakeCase(value: string): string {
  * Maps camelCase entity properties to snake_case database identifiers.
  * Tables and columns that already declare explicit names are unaffected.
  */
-export class SnakeNamingStrategy
-  extends DefaultNamingStrategy
-  implements NamingStrategyInterface
-{
+export class SnakeNamingStrategy extends DefaultNamingStrategy implements NamingStrategyInterface {
   override tableName(className: string, customName?: string): string {
     return customName ?? snakeCase(className);
   }
@@ -37,7 +34,9 @@ export class SnakeNamingStrategy
     secondTableName: string,
     firstPropertyName: string,
   ): string {
-    return snakeCase(`${firstTableName}_${firstPropertyName.replaceAll('.', '_')}_${secondTableName}`);
+    return snakeCase(
+      `${firstTableName}_${firstPropertyName.replaceAll('.', '_')}_${secondTableName}`,
+    );
   }
 
   override joinTableColumnName(

@@ -2,17 +2,16 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { User } from './user.entity';
 
-/**
- * One row per issued token pair. Clients obtain a pair via
- * GET /api/v1/oauth/token and rotate the access token via
- * POST /api/v1/oauth/token. Both token columns are globally unique;
- * an expired refresh token causes the whole row to be deleted.
- */
 @Entity({ name: 'auth_table' })
+@Index('idx_auth_table_user_id', ['userId'])
 export class AuthToken {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -28,6 +27,16 @@ export class AuthToken {
 
   @Column({ type: 'timestamptz', name: 'refresh_token_expires_at' })
   refreshTokenExpiresAt!: Date;
+
+  @Column({ type: 'boolean', name: 'is_authorized', default: false })
+  isAuthorized!: boolean;
+
+  @Column({ type: 'uuid', name: 'user_id', nullable: true })
+  userId!: string | null;
+
+  @ManyToOne(() => User, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'user_id' })
+  user?: User | null;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt!: Date;

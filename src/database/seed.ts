@@ -59,8 +59,18 @@ async function seedSampleData(dataSource: Awaited<ReturnType<typeof createDataSo
       photo: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
       photoMimeType: 'image/png',
     }),
-    shopRepo.create({ name: 'Doner Dream', latitude: 52.535, longitude: 13.425, isValidated: true }),
-    shopRepo.create({ name: 'Adana Grill House', latitude: 52.51, longitude: 13.36, isValidated: false }),
+    shopRepo.create({
+      name: 'Doner Dream',
+      latitude: 52.535,
+      longitude: 13.425,
+      isValidated: true,
+    }),
+    shopRepo.create({
+      name: 'Adana Grill House',
+      latitude: 52.51,
+      longitude: 13.36,
+      isValidated: false,
+    }),
   ]);
 
   const ratingRepo = dataSource.getRepository(Rating);

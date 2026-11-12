@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { CreateShopRequest } from '../../src/modules/shop/dto/create-shop-request.dto';
 import { ListShopsQuery } from '../../src/modules/shop/dto/list-shops-query.dto';
 import { CreateRatingRequest } from '../../src/modules/rating/dto/create-rating-request.dto';
+import { LoginRequest } from '../../src/modules/oauth/dto/login-request.dto';
+import { RegisterRequest } from '../../src/modules/oauth/dto/register-request.dto';
 import { parseAndValidate } from '../../src/middleware/validate';
 
 describe('CreateShopRequest', () => {
@@ -93,6 +95,57 @@ describe('CreateRatingRequest', () => {
         priceFairRating: 4,
         interiorRating: 4,
       }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+});
+
+describe('RegisterRequest', () => {
+  it('accepts valid credentials and normalizes the email', async () => {
+    const dto = await parseAndValidate(RegisterRequest, {
+      email: '  NewUser@Example.COM ',
+      password: 'secret-password',
+    });
+    expect(dto.email).toBe('newuser@example.com');
+    expect(dto.password).toBe('secret-password');
+  });
+
+  it('accepts form-urlencoded string fields', async () => {
+    const dto = await parseAndValidate(RegisterRequest, {
+      email: 'user@example.com',
+      password: 'secret-password',
+    });
+    expect(dto.password).toBe('secret-password');
+  });
+
+  it.each([
+    ['not-an-email', 'secret-password', 'email'],
+    ['', 'secret-password', 'email'],
+    ['user@example.com', 'short', 'password'],
+    ['user@example.com', '', 'password'],
+    ['user@example.com', 'x'.repeat(73), 'password'],
+  ])('rejects %j', async (email, password) => {
+    await expect(parseAndValidate(RegisterRequest, { email, password })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    });
+  });
+});
+
+describe('LoginRequest', () => {
+  it('accepts credentials and normalizes the email', async () => {
+    const dto = await parseAndValidate(LoginRequest, {
+      email: ' User@Example.com ',
+      password: 'anything-at-all',
+    });
+    expect(dto.email).toBe('user@example.com');
+    expect(dto.password).toBe('anything-at-all');
+  });
+
+  it('rejects a missing password and a malformed email', async () => {
+    await expect(
+      parseAndValidate(LoginRequest, { email: 'user@example.com' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await expect(
+      parseAndValidate(LoginRequest, { email: 'nope', password: 'x' }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });

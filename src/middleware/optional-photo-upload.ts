@@ -2,26 +2,19 @@ import { Request, RequestHandler, Response } from 'express';
 import multer from 'multer';
 import { env } from '../config/env';
 import { AppError } from '../utils/error/app-error';
+import { isAllowedImageMime } from '../utils/photo/is-allowed-image-mime';
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: env.MAX_UPLOAD_MB * 1024 * 1024, files: 1, fields: 30 },
   fileFilter: (_req, file, cb) => {
     if (!isAllowedImageMime(file.mimetype)) {
-      cb(
-        AppError.badRequest(
-          `Only image files are allowed, received "${file.mimetype}".`,
-        ),
-      );
+      cb(AppError.badRequest(`Only image files are allowed, received "${file.mimetype}".`));
       return;
     }
     cb(null, true);
   },
 });
-
-export function isAllowedImageMime(mimeType: string): boolean {
-  return mimeType.startsWith('image/');
-}
 
 /**
  * Parses a `photo` file field only when the request is multipart, so the same

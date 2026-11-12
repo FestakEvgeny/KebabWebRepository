@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { NextFunction, Request, Response } from 'express';
 import { AuthToken } from '../../src/database/entities/auth-token.entity';
-import { createAuthenticate, extractBearerToken } from '../../src/middleware/authenticate';
+import { createAuthenticate } from '../../src/middleware/authenticate';
+import { extractBearerToken } from '../../src/utils/string/extract-bearer-token';
 import { OAuthService } from '../../src/modules/oauth/oauth.service';
 
 function createOAuthService(record: AuthToken | null): OAuthService {
@@ -40,14 +41,18 @@ describe('createAuthenticate', () => {
     const req = createRequest();
     const { next } = await runMiddleware(createAuthenticate(createOAuthService(record)), req);
 
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401, code: 'UNAUTHORIZED' }));
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({ statusCode: 401, code: 'UNAUTHORIZED' }),
+    );
   });
 
   it('rejects a non-Bearer scheme with 401 UNAUTHORIZED', async () => {
     const req = createRequest('Basic dXNlcjpwYXNz');
     const { next } = await runMiddleware(createAuthenticate(createOAuthService(record)), req);
 
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401, code: 'UNAUTHORIZED' }));
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({ statusCode: 401, code: 'UNAUTHORIZED' }),
+    );
   });
 
   it('rejects an unknown or expired access token with 401 INVALID_ACCESS_TOKEN', async () => {
@@ -70,10 +75,14 @@ describe('extractBearerToken', () => {
     expect(extractBearerToken(header)).toBe(expected);
   });
 
-  it.each([['Basic abc'], ['Bearer'], ['Bearer '], ['Bearer token with spaces'], [undefined], [42]])(
-    'rejects %j',
-    (header) => {
-      expect(extractBearerToken(header)).toBeNull();
-    },
-  );
+  it.each([
+    ['Basic abc'],
+    ['Bearer'],
+    ['Bearer '],
+    ['Bearer token with spaces'],
+    [undefined],
+    [42],
+  ])('rejects %j', (header) => {
+    expect(extractBearerToken(header)).toBeNull();
+  });
 });

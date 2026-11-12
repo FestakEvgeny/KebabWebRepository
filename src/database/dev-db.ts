@@ -7,23 +7,9 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import type EmbeddedPostgres from 'embedded-postgres';
 
-interface EmbeddedPostgresOptions {
-  databaseDir: string;
-  user: string;
-  password: string;
-  port: number;
-  persistent?: boolean;
-}
-
-interface EmbeddedPostgresInstance {
-  initialise(): Promise<void>;
-  start(): Promise<void>;
-  stop(): Promise<void>;
-  createDatabase(database: string): Promise<void>;
-}
-
-type EmbeddedPostgresConstructor = new (options: EmbeddedPostgresOptions) => EmbeddedPostgresInstance;
+type EmbeddedPostgresCtor = typeof EmbeddedPostgres;
 
 const DATA_DIR = path.resolve(process.cwd(), 'data', 'pg');
 const DB_USER = 'kebab';
@@ -32,20 +18,24 @@ const DB_NAME = 'kebab_guide';
 const DB_PORT = 5432;
 
 /** The package is ESM-only; a dynamic import keeps the CommonJS build valid. */
-async function loadEmbeddedPostgres(): Promise<EmbeddedPostgresConstructor> {
+async function loadEmbeddedPostgres(): Promise<EmbeddedPostgresCtor> {
   const moduleId = 'embedded-postgres';
-  const module = (await import(moduleId)) as { default: EmbeddedPostgresConstructor };
+  const module = (await import(moduleId)) as { default: EmbeddedPostgresCtor };
   return module.default;
 }
 
-async function start(EmbeddedPostgres: EmbeddedPostgresConstructor): Promise<void> {
-  const pg = new EmbeddedPostgres({
+function createInstance(Ctor: EmbeddedPostgresCtor): EmbeddedPostgres {
+  return new Ctor({
     databaseDir: DATA_DIR,
     user: DB_USER,
     password: DB_PASSWORD,
     port: DB_PORT,
     persistent: true,
   });
+}
+
+async function start(Ctor: EmbeddedPostgresCtor): Promise<void> {
+  const pg = createInstance(Ctor);
   if (!fs.existsSync(path.join(DATA_DIR, 'PG_VERSION'))) {
     console.log(`[kebab-guide] Initialising embedded PostgreSQL in ${DATA_DIR}`);
     await pg.initialise();
@@ -63,21 +53,14 @@ async function start(EmbeddedPostgres: EmbeddedPostgresConstructor): Promise<voi
   );
 }
 
-async function stop(EmbeddedPostgres: EmbeddedPostgresConstructor): Promise<void> {
-  const pg = new EmbeddedPostgres({
-    databaseDir: DATA_DIR,
-    user: DB_USER,
-    password: DB_PASSWORD,
-    port: DB_PORT,
-    persistent: true,
-  });
-  await pg.stop();
+async function stop(Ctor: EmbeddedPostgresCtor): Promise<void> {
+  await createInstance(Ctor).stop();
   console.log('[kebab-guide] Embedded PostgreSQL stopped.');
 }
 
-async function clean(EmbeddedPostgres: EmbeddedPostgresConstructor): Promise<void> {
+async function clean(Ctor: EmbeddedPostgresCtor): Promise<void> {
   try {
-    await stop(EmbeddedPostgres);
+    await stop(Ctor);
   } catch {
     // server may not be running; that is fine
   }
@@ -88,16 +71,16 @@ async function clean(EmbeddedPostgres: EmbeddedPostgresConstructor): Promise<voi
 const command = process.argv[2] ?? 'start';
 
 (async () => {
-  const EmbeddedPostgres = await loadEmbeddedPostgres();
+  const Ctor = await loadEmbeddedPostgres();
   switch (command) {
     case 'start':
-      await start(EmbeddedPostgres);
+      await start(Ctor);
       break;
     case 'stop':
-      await stop(EmbeddedPostgres);
+      await stop(Ctor);
       break;
     case 'clean':
-      await clean(EmbeddedPostgres);
+      await clean(Ctor);
       break;
     default:
       console.error(`Unknown command "${command}". Use start | stop | clean.`);

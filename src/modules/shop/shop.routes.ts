@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { optionalPhotoUpload } from '../../middleware/upload';
-import { apiWriteLimiter } from '../../middleware/rate-limit';
+import { optionalPhotoUpload } from '../../middleware/optional-photo-upload';
+import { apiWriteLimiter } from '../../middleware/api-write-limiter';
 import { ShopController } from './shop.controller';
 import { RatingController } from '../rating/rating.controller';
 
@@ -15,7 +15,10 @@ import { RatingController } from '../rating/rating.controller';
  *   POST /:shopId/ratings submit a rating (nested router from RatingController)
  *   GET  /:shopId/ratings validated ratings of a shop
  */
-export function createShopRouter(shopController: ShopController, ratingController: RatingController): Router {
+export function createShopRouter(
+  shopController: ShopController,
+  ratingController: RatingController,
+): Router {
   const router = Router();
 
   router.post('/', apiWriteLimiter, optionalPhotoUpload('photo'), shopController.create);
