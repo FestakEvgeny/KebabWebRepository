@@ -4,17 +4,6 @@ import { apiWriteLimiter } from '../../middleware/api-write-limiter';
 import { ShopController } from './shop.controller';
 import { RatingController } from '../rating/rating.controller';
 
-/**
- * Public shop endpoints mounted at /api/v1/shops:
- *
- *   POST /                submit a shop (stored pending until an admin validates it)
- *   GET  /                validated shops, paginated + search + geo filter
- *   GET  /all             every validated shop, no pagination
- *   GET  /:id             shop detail incl. validated ratings
- *   GET  /:id/photo       shop photo bytes
- *   POST /:shopId/ratings submit a rating (nested router from RatingController)
- *   GET  /:shopId/ratings validated ratings of a shop
- */
 export function createShopRouter(
   shopController: ShopController,
   ratingController: RatingController,

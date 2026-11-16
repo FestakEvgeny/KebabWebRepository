@@ -49,11 +49,6 @@ export class ShopService {
     return this.repo.save(shop);
   }
 
-  /**
-   * Every validated shop in one response, no pagination (mobile catalogue);
-   * pending shops are hidden from all public listings until an admin
-   * validates them. Photo blobs are excluded to keep the payload light.
-   */
   async listAll(): Promise<Shop[]> {
     return this.repo
       .createQueryBuilder('shop')
@@ -69,10 +64,6 @@ export class ShopService {
     return shop;
   }
 
-  /**
-   * Single shop for the detail view plus its validated ratings (newest
-   * first); only validated ratings are exposed to the public.
-   */
   async getByIdWithRatings(id: string): Promise<Shop> {
     const shop = await this.getById(id);
     shop.ratings = await this.ds.getRepository(Rating).find({
