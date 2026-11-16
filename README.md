@@ -61,8 +61,8 @@ migrations in `modules/<name>/migrations/`, assembled by `database/data-source.t
 The rest of the app may only use a module through its **public API**
 (`src/modules/<name>/index.ts`), which exposes its Nest module class
 (`<Name>Module`), its service(s), DI tokens, entities and port types.
-Internals are not importable from other modules — `eslint-plugin-boundaries`
-enforces this (`npm run lint`).
+Internals are not importable from other modules — keep imports on the
+public API only (by convention, not lint-enforced).
 
 Dependency injection uses the NestJS IoC container
 (`@nestjs/common` + `@nestjs/core`): services and controllers are
