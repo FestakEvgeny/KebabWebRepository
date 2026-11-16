@@ -1,30 +1,27 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DataSource } from 'typeorm';
+import { Rating } from '../../src/modules/rating/rating.entity';
 import { RatingService } from '../../src/modules/rating/rating.service';
+import { IRatingRepository, NewRating } from '../../src/modules/rating/rating.repository';
 import { ShopGateway } from '../../src/modules/rating/shop-gateway';
 import { toRatingResponse } from '../../src/modules/rating/rating.mapper';
 import { CreateRatingRequest } from '../../src/modules/rating/dto/create-rating-request.dto';
 
-function createFakeRepo(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+const emptyPage = { data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 1 } };
+
+function createFakeRepository(overrides: Partial<IRatingRepository> = {}): IRatingRepository {
   return {
-    create: vi.fn((entity: Record<string, unknown>) => entity),
-    save: vi.fn(async (entity: Record<string, unknown>) => ({
-      ...entity,
-      id: entity.id ?? 'rating-1',
-    })),
-    findOne: vi.fn(),
-    findOneBy: vi.fn(),
-    delete: vi.fn(),
-    query: vi.fn(),
-    createQueryBuilder: vi.fn(() => {
-      throw new Error('not used in this test');
-    }),
+    findById: vi.fn(async () => null),
+    findPhotoById: vi.fn(async () => null),
+    add: vi.fn(async (data: NewRating) => ({ ...data, id: 'rating-1' }) as Rating),
+    save: vi.fn(async (rating: Rating) => rating),
+    remove: vi.fn(async () => undefined),
+    listByShop: vi.fn(async () => emptyPage),
+    listValidatedByShop: vi.fn(async () => []),
+    listAdmin: vi.fn(async () => emptyPage),
+    aggregateValidatedByShop: vi.fn(async () => ({ averageRating: '4.33', ratingCount: 1 })),
+    stats: vi.fn(async () => ({ totalRatings: 0, pendingRatings: 0 })),
     ...overrides,
   };
-}
-
-function createFakeDataSource(repo: Record<string, unknown>): DataSource {
-  return { getRepository: vi.fn(() => repo), query: vi.fn() } as unknown as DataSource;
 }
 
 function createFakeShopGateway(overrides: Record<string, unknown> = {}): ShopGateway {
@@ -44,30 +41,44 @@ const baseRequest: CreateRatingRequest = {
 
 describe('RatingService.createForShop', () => {
   it('creates a pending rating when the shop exists', async () => {
-    const repo = createFakeRepo({ findOneBy: vi.fn(async () => ({ id: 'shop-1' })) });
-    const service = new RatingService(createFakeDataSource(repo), createFakeShopGateway());
+    const repo = createFakeRepository();
+    const service = new RatingService(repo, createFakeShopGateway());
 
     const rating = await service.createForShop('shop-1', baseRequest);
 
     expect(rating.isValidated).toBe(false);
     expect(rating.shopId).toBe('shop-1');
     expect(rating.notes).toBe('Tasty');
+    expect(repo.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shopId: 'shop-1',
+        foodQualityRating: 5,
+        isValidated: false,
+        notes: 'Tasty',
+      }),
+    );
   });
 
   it('throws 404 when the shop does not exist', async () => {
-    const repo = createFakeRepo();
-    const service = new RatingService(createFakeDataSource(repo), createFakeShopGateway({ exists: vi.fn(async () => false) }));
+    const repo = createFakeRepository();
+    const service = new RatingService(
+      repo,
+      createFakeShopGateway({ exists: vi.fn(async () => false) }),
+    );
 
     await expect(service.createForShop('missing', baseRequest)).rejects.toMatchObject({
       statusCode: 404,
       code: 'NOT_FOUND',
     });
+    expect(repo.add).not.toHaveBeenCalled();
   });
 
   it('pushes recomputed aggregates to the shop gateway after a validated create', async () => {
-    const repo = createFakeRepo({ query: vi.fn(async () => [{ avg_rating: '4.33', rating_count: 1 }]) });
+    const repo = createFakeRepository({
+      aggregateValidatedByShop: vi.fn(async () => ({ averageRating: '4.33', ratingCount: 1 })),
+    });
     const gateway = createFakeShopGateway();
-    const service = new RatingService(createFakeDataSource(repo), gateway);
+    const service = new RatingService(repo, gateway);
 
     await service.createAsAdmin({ ...baseRequest, shopId: 'shop-1', isValidated: true });
 
@@ -75,22 +86,26 @@ describe('RatingService.createForShop', () => {
   });
 
   it('skips aggregate recomputation for pending ratings', async () => {
-    const repo = createFakeRepo({ query: vi.fn(async () => [{ avg_rating: '4.33', rating_count: 1 }]) });
+    const repo = createFakeRepository({
+      aggregateValidatedByShop: vi.fn(async () => ({ averageRating: '4.33', ratingCount: 1 })),
+    });
     const gateway = createFakeShopGateway();
-    const service = new RatingService(createFakeDataSource(repo), gateway);
+    const service = new RatingService(repo, gateway);
 
     await service.createAsAdmin({ ...baseRequest, shopId: 'shop-1', isValidated: false });
 
     expect(gateway.applyRatingAggregates).not.toHaveBeenCalled();
+    expect(repo.aggregateValidatedByShop).not.toHaveBeenCalled();
   });
 
   it('normalises blank notes to null', async () => {
-    const repo = createFakeRepo({ findOneBy: vi.fn(async () => ({ id: 'shop-1' })) });
-    const service = new RatingService(createFakeDataSource(repo), createFakeShopGateway());
+    const repo = createFakeRepository();
+    const service = new RatingService(repo, createFakeShopGateway());
 
     const rating = await service.createForShop('shop-1', { ...baseRequest, notes: '   ' });
 
     expect(rating.notes).toBeNull();
+    expect(repo.add).toHaveBeenCalledWith(expect.objectContaining({ notes: null }));
   });
 });
 

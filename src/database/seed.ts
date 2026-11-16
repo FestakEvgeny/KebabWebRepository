@@ -2,8 +2,11 @@ import 'reflect-metadata';
 import { createDataSource } from './data-source';
 import { env } from '../shared/config/env';
 import { AdminAuthService } from '../modules/admin';
+import { AdminUserRepositoryImpl } from '../modules/admin/admin-user.repository-impl';
 import { RatingService } from '../modules/rating';
+import { RatingRepositoryImpl } from '../modules/rating/rating.repository-impl';
 import { ShopService } from '../modules/shop';
+import { ShopRepositoryImpl } from '../modules/shop/shop.repository-impl';
 
 // A 1x1 pixel PNG used as a sample shop photo.
 const SAMPLE_PNG_BASE64 =
@@ -14,7 +17,7 @@ async function main(): Promise<void> {
   await dataSource.initialize();
 
   try {
-    const adminAuth = new AdminAuthService(dataSource);
+    const adminAuth = new AdminAuthService(new AdminUserRepositoryImpl(dataSource));
     const email = env.ADMIN_EMAIL.trim().toLowerCase();
     const created = await adminAuth.ensureAdminUser(email, env.ADMIN_PASSWORD);
     if (created) {
@@ -36,8 +39,10 @@ async function main(): Promise<void> {
 async function seedSampleData(dataSource: Awaited<ReturnType<typeof createDataSource>>) {
   // The seed only creates shops and ratings, never reads detail pages, so the
   // ratings-reader port can stay empty.
-  const shops = new ShopService(dataSource, { listValidatedByShop: async () => [] });
-  const ratings = new RatingService(dataSource, shops);
+  const shops = new ShopService(new ShopRepositoryImpl(dataSource), {
+    listValidatedByShop: async () => [],
+  });
+  const ratings = new RatingService(new RatingRepositoryImpl(dataSource), shops);
 
   const existingShops = await shops.list({ page: 1, limit: 1, isValidated: undefined });
   if (existingShops.pagination.total > 0) {

@@ -2,6 +2,8 @@ import { forwardRef, Module } from '@nestjs/common';
 import { Router } from 'express';
 import { SHOP_RATINGS_READER, ShopModule, ShopRatingsReader } from '../shop';
 import { RatingController } from './rating.controller';
+import { RatingRepositoryImpl } from './rating.repository-impl';
+import { RATING_REPOSITORY } from './rating.repository';
 import { RatingService } from './rating.service';
 
 /** DI token for the router mounted at /shops/:shopId/ratings by the composition root. */
@@ -17,6 +19,10 @@ export const RATINGS_ROOT_ROUTER = 'RATINGS_ROOT_ROUTER';
 @Module({
   imports: [forwardRef(() => ShopModule)],
   providers: [
+    {
+      provide: RATING_REPOSITORY,
+      useClass: RatingRepositoryImpl,
+    },
     RatingService,
     RatingController,
     {

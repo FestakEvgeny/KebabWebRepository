@@ -2,6 +2,8 @@ import { forwardRef, Module } from '@nestjs/common';
 import { Router } from 'express';
 import { RatingModule } from '../rating';
 import { ShopController } from './shop.controller';
+import { ShopRepositoryImpl } from './shop.repository-impl';
+import { SHOP_REPOSITORY } from './shop.repository';
 import { ShopService } from './shop.service';
 import { createShopRouter } from './shop.routes';
 
@@ -16,6 +18,10 @@ export const SHOP_ROUTER = 'SHOP_ROUTER';
 @Module({
   imports: [forwardRef(() => RatingModule)],
   providers: [
+    {
+      provide: SHOP_REPOSITORY,
+      useClass: ShopRepositoryImpl,
+    },
     ShopService,
     ShopController,
     {

@@ -1,9 +1,10 @@
 import * as bcrypt from 'bcryptjs';
 import { Inject, Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
 import { env } from '../../shared/config/env';
 import { AuthToken } from './auth-token.entity';
+import { IAuthTokenRepository, AUTH_TOKEN_REPOSITORY } from './auth-token.repository';
 import { User } from './user.entity';
+import { IUserRepository, USER_REPOSITORY } from './user.repository';
 import { AppError } from '../../shared/utils/error/app-error';
 import { randomToken } from '../../shared/utils/math/crypto';
 
@@ -23,17 +24,12 @@ const UNIQUE_VIOLATION = '23505';
 
 @Injectable()
 export class OAuthService {
-  // The token is declared explicitly instead of relying on reflected
-  // paramtypes so the DI graph survives the esbuild-based dev runner.
-  constructor(@Inject(DataSource) private readonly dataSource: DataSource) {}
-
-  private get repository() {
-    return this.dataSource.getRepository(AuthToken);
-  }
-
-  private get users() {
-    return this.dataSource.getRepository(User);
-  }
+  // Tokens are declared explicitly (instead of relying on reflected
+  // paramtypes) so the DI graph survives the esbuild-based dev runner.
+  constructor(
+    @Inject(AUTH_TOKEN_REPOSITORY) private readonly tokens: IAuthTokenRepository,
+    @Inject(USER_REPOSITORY) private readonly users: IUserRepository,
+  ) {}
 
   async issueTokens(now = new Date()): Promise<AuthToken> {
     return this.createTokenPair({ userId: null, isAuthorized: false }, now);
@@ -41,16 +37,15 @@ export class OAuthService {
 
   async register(email: string, password: string): Promise<User> {
     const normalized = normalizeEmail(email);
-    if (await this.users.findOneBy({ email: normalized })) {
+    if (await this.users.findByEmail(normalized)) {
       throw emailAlreadyRegistered(normalized);
     }
 
-    const user = this.users.create({
-      email: normalized,
-      passwordHash: await bcrypt.hash(password, PASSWORD_HASH_ROUNDS),
-    });
     try {
-      return await this.users.save(user);
+      return await this.users.add({
+        email: normalized,
+        passwordHash: await bcrypt.hash(password, PASSWORD_HASH_ROUNDS),
+      });
     } catch (error) {
       if (isUniqueViolation(error)) throw emailAlreadyRegistered(normalized);
       throw error;
@@ -59,7 +54,7 @@ export class OAuthService {
 
   /** Verifies credentials and issues a token pair bound to the user (POST /oauth/login). */
   async login(email: string, password: string, now = new Date()): Promise<AuthToken> {
-    const user = await this.users.findOneBy({ email: normalizeEmail(email) });
+    const user = await this.users.findByEmail(normalizeEmail(email));
     // Comparing against a dummy hash keeps the response time flat for unknown emails.
     const passwordOk = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
     if (!user || !passwordOk) {
@@ -69,12 +64,11 @@ export class OAuthService {
   }
 
   async logout(accessToken: string): Promise<boolean> {
-    const result = await this.repository.delete({ accessToken });
-    return (result.affected ?? 0) > 0;
+    return this.tokens.deleteByAccessToken(accessToken);
   }
 
   async refreshAccessToken(refreshToken: string, now = new Date()): Promise<AuthToken> {
-    const record = await this.repository.findOneBy({ refreshToken });
+    const record = await this.tokens.findByRefreshToken(refreshToken);
     if (!record) {
       throw new AppError(
         400,
@@ -83,7 +77,7 @@ export class OAuthService {
       );
     }
     if (record.refreshTokenExpiresAt.getTime() <= now.getTime()) {
-      await this.repository.delete({ id: record.id });
+      await this.tokens.deleteById(record.id);
       throw new AppError(
         400,
         'REFRESH_TOKEN_EXPIRED',
@@ -100,7 +94,7 @@ export class OAuthService {
       record.accessToken = randomToken(ACCESS_TOKEN_BYTES);
       record.accessTokenExpiresAt = accessTokenExpiresIs;
       try {
-        return await this.repository.save(record);
+        return await this.tokens.save(record);
       } catch (error) {
         if (!isUniqueViolation(error) || attempt >= MAX_TOKEN_ATTEMPTS) throw error;
       }
@@ -108,7 +102,7 @@ export class OAuthService {
   }
 
   async findActiveByAccessToken(accessToken: string, now = new Date()): Promise<AuthToken | null> {
-    const record = await this.repository.findOneBy({ accessToken });
+    const record = await this.tokens.findByAccessToken(accessToken);
     if (!record) return null;
     return record.accessTokenExpiresAt.getTime() > now.getTime() ? record : null;
   }
@@ -118,15 +112,15 @@ export class OAuthService {
     now: Date,
   ): Promise<AuthToken> {
     for (let attempt = 1; ; attempt += 1) {
-      const record = this.repository.create({
+      const data = {
         ...owner,
         accessToken: randomToken(ACCESS_TOKEN_BYTES),
         refreshToken: randomToken(REFRESH_TOKEN_BYTES),
         accessTokenExpiresAt: addSeconds(now, env.ACCESS_TOKEN_TTL_SECONDS),
         refreshTokenExpiresAt: addSeconds(now, env.REFRESH_TOKEN_TTL_SECONDS),
-      });
+      };
       try {
-        return await this.repository.save(record);
+        return await this.tokens.add(data);
       } catch (error) {
         if (!isUniqueViolation(error) || attempt >= MAX_TOKEN_ATTEMPTS) throw error;
       }

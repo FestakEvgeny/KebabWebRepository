@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { Router } from 'express';
 import { RatingModule, RatingService } from '../rating';
 import { ShopModule, ShopService } from '../shop';
+import { AdminUserRepositoryImpl } from './admin-user.repository-impl';
+import { ADMIN_USER_REPOSITORY } from './admin-user.repository';
 import { AdminAuthService } from './admin-auth.service';
 import { createAdminRouter } from './admin.routes';
 
@@ -15,6 +17,10 @@ export const ADMIN_ROUTER = 'ADMIN_ROUTER';
 @Module({
   imports: [ShopModule, RatingModule],
   providers: [
+    {
+      provide: ADMIN_USER_REPOSITORY,
+      useClass: AdminUserRepositoryImpl,
+    },
     AdminAuthService,
     {
       provide: ADMIN_ROUTER,

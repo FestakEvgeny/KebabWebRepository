@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
 import { RequestHandler, Router } from 'express';
+import { AuthTokenRepositoryImpl } from './auth-token.repository-impl';
+import { AUTH_TOKEN_REPOSITORY } from './auth-token.repository';
+import { UserRepositoryImpl } from './user.repository-impl';
+import { USER_REPOSITORY } from './user.repository';
 import { OAuthController } from './oauth.controller';
 import { OAuthService } from './oauth.service';
 import { createOAuthRouter } from './oauth.routes';
@@ -13,6 +17,14 @@ export const AUTHENTICATE = 'AUTHENTICATE';
 /** Nest wiring for the OAuth module (token issuing, register/login/logout). */
 @Module({
   providers: [
+    {
+      provide: AUTH_TOKEN_REPOSITORY,
+      useClass: AuthTokenRepositoryImpl,
+    },
+    {
+      provide: USER_REPOSITORY,
+      useClass: UserRepositoryImpl,
+    },
     OAuthService,
     OAuthController,
     {

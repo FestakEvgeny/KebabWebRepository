@@ -1,28 +1,44 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as bcrypt from 'bcryptjs';
-import { DataSource } from 'typeorm';
 import { env } from '../../src/shared/config/env';
 import { AuthToken } from '../../src/modules/oauth/auth-token.entity';
 import { User } from '../../src/modules/oauth/user.entity';
+import {
+  IAuthTokenRepository,
+  NewAuthToken,
+} from '../../src/modules/oauth/auth-token.repository';
+import { IUserRepository, NewUser } from '../../src/modules/oauth/user.repository';
 import { OAuthService } from '../../src/modules/oauth/oauth.service';
 
-function createFakeRepo(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function createFakeTokenRepository(
+  overrides: Partial<IAuthTokenRepository> = {},
+): IAuthTokenRepository {
   return {
-    create: vi.fn((entity: Partial<AuthToken>) => entity),
-    save: vi.fn(async (entity: Partial<AuthToken>) => ({ ...entity, id: entity.id ?? 'auth-1' })),
-    findOneBy: vi.fn(),
-    delete: vi.fn(async () => ({ affected: 1 })),
+    findByAccessToken: vi.fn(async () => null),
+    findByRefreshToken: vi.fn(async () => null),
+    add: vi.fn(async (data: NewAuthToken) => ({ ...data, id: 'auth-1' }) as AuthToken),
+    save: vi.fn(async (record: AuthToken) => record),
+    deleteById: vi.fn(async () => undefined),
+    deleteByAccessToken: vi.fn(async () => true),
     ...overrides,
   };
 }
 
-function createFakeDataSource(
-  repo: Record<string, unknown>,
-  userRepo: Record<string, unknown> = createFakeRepo(),
-): DataSource {
+function createFakeUserRepository(overrides: Partial<IUserRepository> = {}): IUserRepository {
   return {
-    getRepository: vi.fn((entity: unknown) => (entity === User ? userRepo : repo)),
-  } as unknown as DataSource;
+    findByEmail: vi.fn(async () => null),
+    add: vi.fn(async (data: NewUser) => ({ ...data, id: 'user-1', createdAt: NOW }) as User),
+    ...overrides,
+  };
+}
+
+function createService(
+  tokenOverrides: Partial<IAuthTokenRepository> = {},
+  userOverrides: Partial<IUserRepository> = {},
+) {
+  const tokens = createFakeTokenRepository(tokenOverrides);
+  const users = createFakeUserRepository(userOverrides);
+  return { service: new OAuthService(tokens, users), tokens, users };
 }
 
 function existingRecord(overrides: Partial<AuthToken> = {}): AuthToken {
@@ -45,8 +61,7 @@ const NOW = new Date('2026-11-06T12:00:00.000Z');
 
 describe('OAuthService', () => {
   it('issues a unique token pair with TTL-based expirations', async () => {
-    const repo = createFakeRepo();
-    const service = new OAuthService(createFakeDataSource(repo));
+    const { service, tokens } = createService();
 
     const record = await service.issueTokens(NOW);
 
@@ -61,31 +76,31 @@ describe('OAuthService', () => {
     expect(record.refreshTokenExpiresAt).toEqual(
       new Date(NOW.getTime() + env.REFRESH_TOKEN_TTL_SECONDS * 1000),
     );
-    expect(repo.save).toHaveBeenCalledTimes(1);
+    expect(tokens.add).toHaveBeenCalledTimes(1);
   });
 
   it('regenerates tokens when the database reports a unique violation', async () => {
     const uniqueViolation = Object.assign(new Error('duplicate key'), { code: '23505' });
-    let saveCalls = 0;
-    const repo = createFakeRepo({
-      save: vi.fn(async (entity: Partial<AuthToken>) => {
-        saveCalls += 1;
-        if (saveCalls === 1) throw uniqueViolation;
-        return { ...entity, id: 'auth-1' };
+    let addCalls = 0;
+    const { service } = createService({
+      add: vi.fn(async (data: NewAuthToken) => {
+        addCalls += 1;
+        if (addCalls === 1) throw uniqueViolation;
+        return { ...data, id: 'auth-1' } as AuthToken;
       }),
     });
-    const service = new OAuthService(createFakeDataSource(repo));
 
     const record = await service.issueTokens(NOW);
 
-    expect(saveCalls).toBe(2);
+    expect(addCalls).toBe(2);
     expect(record.accessToken).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it('refresh rotates the access token but reuses the refresh token untouched', async () => {
     const existing = existingRecord();
-    const repo = createFakeRepo({ findOneBy: vi.fn(async () => ({ ...existing })) });
-    const service = new OAuthService(createFakeDataSource(repo));
+    const { service, tokens } = createService({
+      findByRefreshToken: vi.fn(async () => ({ ...existing })),
+    });
 
     const record = await service.refreshAccessToken(existing.refreshToken, NOW);
 
@@ -96,31 +111,32 @@ describe('OAuthService', () => {
     expect(record.accessTokenExpiresAt).toEqual(
       new Date(NOW.getTime() + env.ACCESS_TOKEN_TTL_SECONDS * 1000),
     );
+    expect(tokens.save).toHaveBeenCalledTimes(1);
   });
 
   it('deletes the record and throws 400 when the refresh token has expired', async () => {
     const existing = existingRecord({
       refreshTokenExpiresAt: new Date(NOW.getTime() - 1000),
     });
-    const repo = createFakeRepo({ findOneBy: vi.fn(async () => ({ ...existing })) });
-    const service = new OAuthService(createFakeDataSource(repo));
+    const { service, tokens } = createService({
+      findByRefreshToken: vi.fn(async () => ({ ...existing })),
+    });
 
     await expect(service.refreshAccessToken(existing.refreshToken, NOW)).rejects.toMatchObject({
       statusCode: 400,
       code: 'REFRESH_TOKEN_EXPIRED',
     });
-    expect(repo.delete).toHaveBeenCalledWith({ id: existing.id });
+    expect(tokens.deleteById).toHaveBeenCalledWith(existing.id);
   });
 
   it('throws 400 for an unknown refresh token without touching the database', async () => {
-    const repo = createFakeRepo({ findOneBy: vi.fn(async () => null) });
-    const service = new OAuthService(createFakeDataSource(repo));
+    const { service, tokens } = createService({ findByRefreshToken: vi.fn(async () => null) });
 
     await expect(service.refreshAccessToken('unknown', NOW)).rejects.toMatchObject({
       statusCode: 400,
       code: 'INVALID_REFRESH_TOKEN',
     });
-    expect(repo.delete).not.toHaveBeenCalled();
+    expect(tokens.deleteById).not.toHaveBeenCalled();
   });
 
   it('findActiveByAccessToken resolves only known, unexpired access tokens', async () => {
@@ -131,16 +147,13 @@ describe('OAuthService', () => {
       accessToken: 'b'.repeat(64),
       accessTokenExpiresAt: new Date(NOW.getTime() - 60_000),
     });
-    const repo = createFakeRepo({
-      findOneBy: vi.fn(async ({ accessToken }: { accessToken: string }) =>
-        accessToken === active.accessToken
-          ? { ...active }
-          : accessToken === expired.accessToken
-            ? { ...expired }
-            : null,
-      ),
+    const { service } = createService({
+      findByAccessToken: vi.fn(async (accessToken: string) => {
+        if (accessToken === active.accessToken) return { ...active };
+        if (accessToken === expired.accessToken) return { ...expired };
+        return null;
+      }),
     });
-    const service = new OAuthService(createFakeDataSource(repo));
 
     expect(await service.findActiveByAccessToken(active.accessToken, NOW)).toMatchObject({
       id: active.id,
@@ -152,38 +165,39 @@ describe('OAuthService', () => {
 
 describe('OAuthService.register', () => {
   it('stores the user with a bcrypt hash and a normalized email, never the plain password', async () => {
-    const userRepo = createFakeRepo({
-      save: vi.fn(async (entity: Partial<User>) => ({ ...entity, id: 'user-1', createdAt: NOW })),
-    });
-    const service = new OAuthService(createFakeDataSource(createFakeRepo(), userRepo));
+    const { service, users } = createService();
 
     const user = await service.register('  NewUser@Example.COM ', 'secret-password');
 
     expect(user.email).toBe('newuser@example.com');
     expect(user.passwordHash).not.toBe('secret-password');
     expect(await bcrypt.compare('secret-password', user.passwordHash)).toBe(true);
-    expect(userRepo.findOneBy).toHaveBeenCalledWith({ email: 'newuser@example.com' });
+    expect(users.findByEmail).toHaveBeenCalledWith('newuser@example.com');
+    expect(users.add).toHaveBeenCalledTimes(1);
   });
 
   it('rejects a duplicate email with 409 EMAIL_ALREADY_REGISTERED without saving', async () => {
-    const userRepo = createFakeRepo({ findOneBy: vi.fn(async () => ({ id: 'user-1' })) });
-    const service = new OAuthService(createFakeDataSource(createFakeRepo(), userRepo));
+    const { service, users } = createService(
+      undefined,
+      { findByEmail: vi.fn(async () => ({ id: 'user-1' }) as User) },
+    );
 
     await expect(service.register('taken@example.com', 'secret-password')).rejects.toMatchObject({
       statusCode: 409,
       code: 'EMAIL_ALREADY_REGISTERED',
     });
-    expect(userRepo.save).not.toHaveBeenCalled();
+    expect(users.add).not.toHaveBeenCalled();
   });
 
   it('maps a concurrent unique violation on save to 409', async () => {
-    const userRepo = createFakeRepo({
-      findOneBy: vi.fn(async () => null),
-      save: vi.fn(async () => {
-        throw Object.assign(new Error('duplicate key'), { code: '23505' });
-      }),
-    });
-    const service = new OAuthService(createFakeDataSource(createFakeRepo(), userRepo));
+    const { service } = createService(
+      undefined,
+      {
+        add: vi.fn(async () => {
+          throw Object.assign(new Error('duplicate key'), { code: '23505' });
+        }),
+      },
+    );
 
     await expect(service.register('taken@example.com', 'secret-password')).rejects.toMatchObject({
       statusCode: 409,
@@ -194,17 +208,15 @@ describe('OAuthService.register', () => {
 
 describe('OAuthService.login', () => {
   async function serviceWithUser(password: string, stored = password) {
-    const userRepo = createFakeRepo({
-      findOneBy: vi.fn(async () => ({
-        id: 'user-1',
-        email: 'user@example.com',
-        passwordHash: await bcrypt.hash(stored, 12),
-      })),
+    return createService(undefined, {
+      findByEmail: vi.fn(async () =>
+        Object.assign(new User(), {
+          id: 'user-1',
+          email: 'user@example.com',
+          passwordHash: await bcrypt.hash(stored, 12),
+        }),
+      ),
     });
-    return {
-      service: new OAuthService(createFakeDataSource(createFakeRepo(), userRepo)),
-      userRepo,
-    };
   }
 
   it('issues an authorized token pair bound to the user', async () => {
@@ -222,18 +234,17 @@ describe('OAuthService.login', () => {
   });
 
   it('rejects a wrong password with 401 INVALID_CREDENTIALS and stores nothing', async () => {
-    const { service, userRepo } = await serviceWithUser('secret-password');
+    const { service, tokens } = await serviceWithUser('secret-password');
 
     await expect(service.login('user@example.com', 'wrong-password', NOW)).rejects.toMatchObject({
       statusCode: 401,
       code: 'INVALID_CREDENTIALS',
     });
-    expect(userRepo.save).not.toHaveBeenCalled();
+    expect(tokens.add).not.toHaveBeenCalled();
   });
 
   it('rejects an unknown email with 401 INVALID_CREDENTIALS', async () => {
-    const userRepo = createFakeRepo({ findOneBy: vi.fn(async () => null) });
-    const service = new OAuthService(createFakeDataSource(createFakeRepo(), userRepo));
+    const { service } = createService(undefined, { findByEmail: vi.fn(async () => null) });
 
     await expect(service.login('ghost@example.com', 'secret-password', NOW)).rejects.toMatchObject({
       statusCode: 401,
@@ -244,16 +255,16 @@ describe('OAuthService.login', () => {
 
 describe('OAuthService.logout', () => {
   it('deletes the record behind the access token', async () => {
-    const repo = createFakeRepo();
-    const service = new OAuthService(createFakeDataSource(repo));
+    const { service, tokens } = createService({
+      deleteByAccessToken: vi.fn(async () => true),
+    });
 
     expect(await service.logout('a'.repeat(64))).toBe(true);
-    expect(repo.delete).toHaveBeenCalledWith({ accessToken: 'a'.repeat(64) });
+    expect(tokens.deleteByAccessToken).toHaveBeenCalledWith('a'.repeat(64));
   });
 
   it('returns false when the access token is unknown', async () => {
-    const repo = createFakeRepo({ delete: vi.fn(async () => ({ affected: 0 })) });
-    const service = new OAuthService(createFakeDataSource(repo));
+    const { service } = createService({ deleteByAccessToken: vi.fn(async () => false) });
 
     expect(await service.logout('missing')).toBe(false);
   });

@@ -1,63 +1,60 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DataSource } from 'typeorm';
 import { Shop } from '../../src/modules/shop/shop.entity';
 import { ShopService } from '../../src/modules/shop/shop.service';
+import { IShopRepository, NewShop } from '../../src/modules/shop/shop.repository';
 import { toShopResponse } from '../../src/modules/shop/shop.mapper';
 import { CreateShopRequest } from '../../src/modules/shop/dto/create-shop-request.dto';
 
-function createFakeRepo(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function createFakeRepository(overrides: Partial<IShopRepository> = {}): IShopRepository {
   return {
-    create: vi.fn((entity: Partial<Shop>) => entity),
-    save: vi.fn(async (entity: Partial<Shop>) => ({ ...entity, id: entity.id ?? 'shop-1' })),
-    findOne: vi.fn(),
-    findOneBy: vi.fn(),
-    delete: vi.fn(),
-    query: vi.fn(),
-    createQueryBuilder: vi.fn(() => {
-      throw new Error('not used in this test');
-    }),
+    exists: vi.fn(async () => true),
+    findById: vi.fn(async () => null),
+    findPhotoById: vi.fn(async () => null),
+    add: vi.fn(async (data: NewShop) => ({ ...data, id: 'shop-1' }) as Shop),
+    save: vi.fn(async (shop: Shop) => shop),
+    remove: vi.fn(async () => undefined),
+    listValidated: vi.fn(async () => []),
+    listFiltered: vi.fn(async () => ({
+      data: [],
+      pagination: { page: 1, limit: 20, total: 0, totalPages: 1 },
+    })),
+    applyRatingAggregates: vi.fn(async () => undefined),
+    stats: vi.fn(async () => ({ totalShops: 0, pendingShops: 0 })),
     ...overrides,
   };
-}
-
-function createFakeDataSource(repo: Record<string, unknown>): DataSource {
-  return {
-    getRepository: vi.fn(() => repo),
-    query: vi.fn(),
-  } as unknown as DataSource;
 }
 
 const baseRequest: CreateShopRequest = { name: 'Kebab King', latitude: 52.52, longitude: 13.405 };
 
 describe('ShopService', () => {
   it('creates a shop as pending validation with a trimmed name', async () => {
-    const repo = createFakeRepo();
-    const service = new ShopService(createFakeDataSource(repo), { listValidatedByShop: vi.fn(async () => []) });
+    const repo = createFakeRepository();
+    const service = new ShopService(repo, { listValidatedByShop: vi.fn(async () => []) });
 
     const shop = await service.create({ ...baseRequest, name: '  Kebab King  ' });
 
     expect(shop.isValidated).toBe(false);
     expect(shop.name).toBe('Kebab King');
-    expect(repo.save).toHaveBeenCalledWith(
+    expect(repo.add).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Kebab King', latitude: 52.52, isValidated: false }),
     );
   });
 
   it('stores photo bytes and mime type when provided', async () => {
-    const repo = createFakeRepo();
-    const service = new ShopService(createFakeDataSource(repo), { listValidatedByShop: vi.fn(async () => []) });
+    const repo = createFakeRepository();
+    const service = new ShopService(repo, { listValidatedByShop: vi.fn(async () => []) });
     const buffer = Buffer.from('fake-image-bytes');
 
     await service.create(baseRequest, { buffer, mimeType: 'image/png', size: buffer.length });
 
-    expect(repo.save).toHaveBeenCalledWith(
+    expect(repo.add).toHaveBeenCalledWith(
       expect.objectContaining({ photo: buffer, photoMimeType: 'image/png' }),
     );
   });
 
   it('throws a 404 AppError when the shop does not exist', async () => {
-    const repo = createFakeRepo({ findOneBy: vi.fn(async () => null) });
-    const service = new ShopService(createFakeDataSource(repo), { listValidatedByShop: vi.fn(async () => []) });
+    const repo = createFakeRepository({ findById: vi.fn(async () => null) });
+    const service = new ShopService(repo, { listValidatedByShop: vi.fn(async () => []) });
 
     await expect(service.getById('00000000-0000-0000-0000-000000000000')).rejects.toMatchObject({
       statusCode: 404,
@@ -66,37 +63,37 @@ describe('ShopService', () => {
   });
 
   it('returns null photo payload when the shop has no photo', async () => {
-    const repo = createFakeRepo({ findOne: vi.fn(async () => null) });
-    const service = new ShopService(createFakeDataSource(repo), { listValidatedByShop: vi.fn(async () => []) });
+    const repo = createFakeRepository({ findPhotoById: vi.fn(async () => null) });
+    const service = new ShopService(repo, { listValidatedByShop: vi.fn(async () => []) });
 
     expect(await service.getPhoto('00000000-0000-0000-0000-000000000000')).toBeNull();
   });
 
   it('applyRatingAggregates stores the aggregates pushed by the rating module', async () => {
-    const repo = createFakeRepo();
-    const service = new ShopService(createFakeDataSource(repo), { listValidatedByShop: vi.fn(async () => []) });
+    const repo = createFakeRepository();
+    const service = new ShopService(repo, { listValidatedByShop: vi.fn(async () => []) });
 
     await service.applyRatingAggregates('shop-1', '4.33', 3);
 
-    expect(repo.query).toHaveBeenCalledTimes(1);
-    const [sql, params] = (repo.query as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(sql).toContain('UPDATE shop_table');
-    expect(params).toEqual(['shop-1', '4.33', 3]);
+    expect(repo.applyRatingAggregates).toHaveBeenCalledTimes(1);
+    expect(repo.applyRatingAggregates).toHaveBeenCalledWith('shop-1', '4.33', 3);
   });
 
   it('exists reports whether the shop row is present', async () => {
-    const repo = createFakeRepo({ count: vi.fn(async () => 1) });
-    const service = new ShopService(createFakeDataSource(repo), { listValidatedByShop: vi.fn(async () => []) });
+    const repo = createFakeRepository({ exists: vi.fn(async () => true) });
+    const service = new ShopService(repo, { listValidatedByShop: vi.fn(async () => []) });
 
     expect(await service.exists('shop-1')).toBe(true);
 
-    const missing = createFakeRepo({ count: vi.fn(async () => 0) });
+    const missing = createFakeRepository({ exists: vi.fn(async () => false) });
     expect(
-      await new ShopService(createFakeDataSource(missing), { listValidatedByShop: vi.fn(async () => []) }).exists('missing'),
+      await new ShopService(missing, { listValidatedByShop: vi.fn(async () => []) }).exists(
+        'missing',
+      ),
     ).toBe(false);
   });
 
-  it('listAll fetches only validated shops in one query without pagination', async () => {
+  it('listAll returns the validated shops loaded by the repository', async () => {
     const shops = [
       {
         id: 'shop-1',
@@ -112,23 +109,13 @@ describe('ShopService', () => {
         updatedAt: new Date('2026-01-02T00:00:00Z'),
       },
     ];
-    const getMany = vi.fn(async () => shops);
-    const where = vi.fn().mockReturnThis();
-    const queryBuilder = {
-      select: vi.fn().mockReturnThis(),
-      where,
-      orderBy: vi.fn().mockReturnThis(),
-      getMany,
-    };
-    const repo = createFakeRepo({ createQueryBuilder: vi.fn(() => queryBuilder) });
-    const service = new ShopService(createFakeDataSource(repo), { listValidatedByShop: vi.fn(async () => []) });
+    const repo = createFakeRepository({ listValidated: vi.fn(async () => shops) });
+    const service = new ShopService(repo, { listValidatedByShop: vi.fn(async () => []) });
 
     const result = await service.listAll();
 
     expect(result).toBe(shops);
-    expect(where).toHaveBeenCalledWith('shop.isValidated = :isValidated', { isValidated: true });
-    expect(queryBuilder.orderBy).toHaveBeenCalledWith('shop.createdAt', 'DESC');
-    expect(getMany).toHaveBeenCalledTimes(1);
+    expect(repo.listValidated).toHaveBeenCalledTimes(1);
   });
 });
 
