@@ -3,12 +3,9 @@ import {
   CreateDateColumn,
   Entity,
   Index,
-  JoinColumn,
-  ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Shop } from './shop.entity';
 
 @Entity({ name: 'rating_table' })
 @Index('idx_rating_table_shop_id', ['shopId'])
@@ -19,10 +16,6 @@ export class Rating {
 
   @Column({ type: 'uuid', name: 'shop_id' })
   shopId!: string;
-
-  @ManyToOne(() => Shop, (shop) => shop.ratings, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'shop_id' })
-  shop!: Shop;
 
   @Column({ type: 'smallint' })
   foodQualityRating!: number;

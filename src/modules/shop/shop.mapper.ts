@@ -1,5 +1,5 @@
-import { Shop } from '../../database/entities/shop.entity';
-import { toRatingResponse } from '../rating/rating.mapper';
+import { Shop } from './shop.entity';
+import { ShopRatingSummary } from './shop-rating-reader';
 import { ShopDetailResponse } from './dto/shop-detail-response.dto';
 import { ShopResponse } from './dto/shop-response.dto';
 
@@ -21,9 +21,12 @@ export function toShopResponse(shop: Shop, distanceKm?: number): ShopResponse {
   };
 }
 
-export function toShopDetailResponse(shop: Shop): ShopDetailResponse {
+export function toShopDetailResponse(
+  shop: Shop,
+  ratings: ShopRatingSummary[],
+): ShopDetailResponse {
   return {
     ...toShopResponse(shop),
-    ratingsList: (shop.ratings ?? []).map((rating) => toRatingResponse(rating)),
+    ratingsList: ratings,
   };
 }

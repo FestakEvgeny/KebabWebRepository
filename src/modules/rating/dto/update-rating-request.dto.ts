@@ -1,6 +1,6 @@
 import { Transform } from 'class-transformer';
 import { IsBoolean } from 'class-validator';
-import { booleanTransform } from '../../../utils/transform/boolean-transform';
+import { booleanTransform } from '../../../shared/utils/transform/boolean-transform';
 import { CreateRatingRequest } from './create-rating-request.dto';
 
 export class UpdateRatingRequest extends CreateRatingRequest {

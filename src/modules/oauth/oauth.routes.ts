@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { apiLoginLimiter } from '../../middleware/api-login-limiter';
-import { apiWriteLimiter } from '../../middleware/api-write-limiter';
+import { apiLoginLimiter } from '../../shared/middleware/api-login-limiter';
+import { apiWriteLimiter } from '../../shared/middleware/api-write-limiter';
 import { OAuthController } from './oauth.controller';
 
 export function createOAuthRouter(oauthController: OAuthController): Router {

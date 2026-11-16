@@ -1,10 +1,11 @@
 import * as bcrypt from 'bcryptjs';
+import { Inject, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { env } from '../../config/env';
-import { AuthToken } from '../../database/entities/auth-token.entity';
-import { User } from '../../database/entities/user.entity';
-import { AppError } from '../../utils/error/app-error';
-import { randomToken } from '../../utils/math/crypto';
+import { env } from '../../shared/config/env';
+import { AuthToken } from './auth-token.entity';
+import { User } from './user.entity';
+import { AppError } from '../../shared/utils/error/app-error';
+import { randomToken } from '../../shared/utils/math/crypto';
 
 /** Random entropy per token; the hex representation is twice as long. */
 const ACCESS_TOKEN_BYTES = 32;
@@ -20,8 +21,11 @@ const DUMMY_HASH = bcrypt.hashSync('timing-equalizer', PASSWORD_HASH_ROUNDS);
 const MAX_TOKEN_ATTEMPTS = 5;
 const UNIQUE_VIOLATION = '23505';
 
+@Injectable()
 export class OAuthService {
-  constructor(private readonly dataSource: DataSource) {}
+  // The token is declared explicitly instead of relying on reflected
+  // paramtypes so the DI graph survives the esbuild-based dev runner.
+  constructor(@Inject(DataSource) private readonly dataSource: DataSource) {}
 
   private get repository() {
     return this.dataSource.getRepository(AuthToken);

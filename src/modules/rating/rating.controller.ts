@@ -1,12 +1,13 @@
+import { Inject, Injectable } from '@nestjs/common';
 import { Request, Response, Router } from 'express';
-import { asyncHandler } from '../../middleware/async-handler';
-import { apiWriteLimiter } from '../../middleware/api-write-limiter';
-import { optionalPhotoUpload } from '../../middleware/optional-photo-upload';
-import { toUploadedPhoto } from '../../utils/photo/uploaded-photo';
-import { parseAndValidate } from '../../middleware/validate';
-import { requireUuid } from '../../utils/string/uuid';
-import { sendPhoto } from '../../utils/photo/send-photo';
-import { AppError } from '../../utils/error/app-error';
+import { asyncHandler } from '../../shared/middleware/async-handler';
+import { apiWriteLimiter } from '../../shared/middleware/api-write-limiter';
+import { optionalPhotoUpload } from '../../shared/middleware/optional-photo-upload';
+import { toUploadedPhoto } from '../../shared/utils/photo/uploaded-photo';
+import { parseAndValidate } from '../../shared/middleware/validate';
+import { requireUuid } from '../../shared/utils/string/uuid';
+import { sendPhoto } from '../../shared/utils/photo/send-photo';
+import { AppError } from '../../shared/utils/error/app-error';
 import { CreateRatingRequest } from './dto/create-rating-request.dto';
 import { ListRatingsQuery } from './dto/list-ratings-query.dto';
 import { RatingService } from './rating.service';
@@ -17,13 +18,15 @@ import { toRatingResponse } from './rating.mapper';
  * and /api/v1/ratings (lookup by id). Every submission is stored as pending;
  * only admins can change moderation state.
  */
+@Injectable()
 export class RatingController {
   /** Mounted at /shops/:shopId/ratings (mergeParams gives access to shopId). */
   public readonly nestedRouter: Router;
   /** Mounted at /ratings (lookup by rating id). */
   public readonly rootRouter: Router;
 
-  constructor(private readonly ratings: RatingService) {
+  // Tokens are declared explicitly so DI works under the esbuild dev runner.
+  constructor(@Inject(RatingService) private readonly ratings: RatingService) {
     this.nestedRouter = Router({ mergeParams: true });
     this.rootRouter = Router();
 

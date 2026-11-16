@@ -1,6 +1,6 @@
-import { env } from '../../config/env';
-import { AuthToken } from '../../database/entities/auth-token.entity';
-import { User } from '../../database/entities/user.entity';
+import { env } from '../../shared/config/env';
+import { AuthToken } from './auth-token.entity';
+import { User } from './user.entity';
 import { RegisteredUserResponse } from './dto/registered-user-response.dto';
 import { TokenResponse } from './dto/token-response.dto';
 

@@ -1,8 +1,8 @@
 import { NextFunction, Request, RequestHandler, Response } from 'express';
-import { OAuthService } from '../modules/oauth/oauth.service';
-import { AppError } from '../utils/error/app-error';
-import { extractBearerToken } from '../utils/string/extract-bearer-token';
-import { asyncHandler } from './async-handler';
+import { OAuthService } from './oauth.service';
+import { AppError } from '../../shared/utils/error/app-error';
+import { extractBearerToken } from '../../shared/utils/string/extract-bearer-token';
+import { asyncHandler } from '../../shared/middleware/async-handler';
 
 export function createAuthenticate(oauthService: OAuthService): RequestHandler {
   return asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {

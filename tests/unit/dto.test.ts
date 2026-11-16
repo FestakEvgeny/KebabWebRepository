@@ -4,7 +4,7 @@ import { ListShopsQuery } from '../../src/modules/shop/dto/list-shops-query.dto'
 import { CreateRatingRequest } from '../../src/modules/rating/dto/create-rating-request.dto';
 import { LoginRequest } from '../../src/modules/oauth/dto/login-request.dto';
 import { RegisterRequest } from '../../src/modules/oauth/dto/register-request.dto';
-import { parseAndValidate } from '../../src/middleware/validate';
+import { parseAndValidate } from '../../src/shared/middleware/validate';
 
 describe('CreateShopRequest', () => {
   it('accepts a valid JSON body', async () => {

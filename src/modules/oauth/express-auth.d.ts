@@ -1,4 +1,4 @@
-import type { AuthToken } from '../database/entities/auth-token.entity';
+import type { AuthToken } from './auth-token.entity';
 
 declare global {
   namespace Express {

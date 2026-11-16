@@ -1,9 +1,6 @@
-import * as bcrypt from 'bcryptjs';
 import { Request, Response, Router } from 'express';
-import { Repository } from 'typeorm';
-import { AdminUser } from '../../database/entities/admin-user.entity';
-import { asyncHandler } from '../../middleware/async-handler';
-import { adminLoginLimiter } from '../../middleware/admin-login-limiter';
+import { asyncHandler } from '../../shared/middleware/async-handler';
+import { adminLoginLimiter } from '../../shared/middleware/admin-login-limiter';
 import { AdminRouterDeps } from './admin-router-deps';
 import { ensureCsrfToken, verifyCsrf } from './csrf';
 import { flash } from './flash';
@@ -12,9 +9,6 @@ import { requireAdmin } from './require-admin';
 import { registerDashboardRoutes } from './dashboard.controller';
 import { registerAdminShopRoutes } from './shops.controller';
 import { registerAdminRatingRoutes } from './ratings.controller';
-
-// Constant hash used to equalise response times when the email is unknown.
-const DUMMY_HASH = bcrypt.hashSync('timing-equalizer', 12);
 
 function regenerateSession(req: Request): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -28,14 +22,13 @@ function regenerateSession(req: Request): Promise<void> {
  * page requires an admin session, and every mutation is CSRF-protected.
  */
 export function createAdminRouter({
-  dataSource,
+  adminAuth,
   shopService,
   ratingService,
 }: AdminRouterDeps): Router {
   const router = Router();
   const shops = shopService;
   const ratings = ratingService;
-  const adminRepo: Repository<AdminUser> = dataSource.getRepository(AdminUser);
 
   // Every admin page needs a CSRF token in its forms.
   router.use((req: Request, res, next) => {
@@ -63,10 +56,9 @@ export function createAdminRouter({
         return;
       }
 
-      const user = await adminRepo.findOneBy({ email: email.trim().toLowerCase() });
-      const passwordOk = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
+      const user = await adminAuth.verifyCredentials(email, password);
 
-      if (!user || !passwordOk) {
+      if (!user) {
         flash(req, 'error', 'Invalid email or password.');
         res.status(401).redirect('/admin/login');
         return;

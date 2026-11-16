@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { NextFunction, Request, Response } from 'express';
-import { AuthToken } from '../../src/database/entities/auth-token.entity';
-import { createAuthenticate } from '../../src/middleware/authenticate';
-import { extractBearerToken } from '../../src/utils/string/extract-bearer-token';
+import { AuthToken } from '../../src/modules/oauth/auth-token.entity';
+import { createAuthenticate } from '../../src/modules/oauth/oauth.authenticate';
+import { extractBearerToken } from '../../src/shared/utils/string/extract-bearer-token';
 import { OAuthService } from '../../src/modules/oauth/oauth.service';
 
 function createOAuthService(record: AuthToken | null): OAuthService {

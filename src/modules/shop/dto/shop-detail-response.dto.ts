@@ -1,4 +1,4 @@
-import { RatingResponse } from '../../rating/dto/rating-response.dto';
+import { ShopRatingSummary } from '../shop-rating-reader';
 
 /**
  * Public shop detail (API v1): a shop plus its validated ratings, newest
@@ -15,5 +15,5 @@ export interface ShopDetailResponse {
   createdAt: string;
   updatedAt: string;
   distanceKm?: number;
-  ratingsList: RatingResponse[];
+  ratingsList: ShopRatingSummary[];
 }

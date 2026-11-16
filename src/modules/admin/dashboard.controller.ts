@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
 import { Router } from 'express';
-import { asyncHandler } from '../../middleware/async-handler';
-import { ShopService } from '../shop/shop.service';
-import { RatingService } from '../rating/rating.service';
+import { asyncHandler } from '../../shared/middleware/async-handler';
+import { ShopService } from '../shop';
+import { RatingService } from '../rating';
+import { DashboardStats } from './dashboard-stats';
 import { renderAdmin } from './render-admin';
 import { toAdminRatingResponse } from './admin.mapper';
 
@@ -14,7 +15,9 @@ export function registerDashboardRoutes(
   router.get(
     '/',
     asyncHandler(async (req: Request, res: Response) => {
-      const stats = await shops.stats();
+      // The dashboard composes stats from both modules' public APIs.
+      const [shopStats, ratingStats] = await Promise.all([shops.stats(), ratings.stats()]);
+      const stats: DashboardStats = { ...shopStats, ...ratingStats };
       const pendingRatings = await ratings.listAdmin({ status: 'pending', page: 1, limit: 5 });
       renderAdmin(req, res, 'dashboard', {
         title: 'Dashboard',

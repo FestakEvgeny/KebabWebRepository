@@ -1,9 +1,10 @@
-import { OAuthService } from '../modules/oauth/oauth.service';
-import { RatingService } from '../modules/rating/rating.service';
-import { ShopService } from '../modules/shop/shop.service';
+import { RequestHandler, Router } from 'express';
 
 export interface ApiV1Deps {
-  shopService: ShopService;
-  ratingService: RatingService;
-  oauthService: OAuthService;
+  /** Bearer-token gate for everything below /api/v1 except the oauth router. */
+  authenticate: RequestHandler;
+  oauthRouter: Router;
+  shopsRouter: Router;
+  ratingsNestedRouter: Router;
+  ratingsRootRouter: Router;
 }

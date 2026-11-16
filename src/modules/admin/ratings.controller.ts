@@ -1,13 +1,11 @@
 import { Request, Response, Router } from 'express';
-import { asyncHandler } from '../../middleware/async-handler';
-import { optionalPhotoUpload } from '../../middleware/optional-photo-upload';
-import { toUploadedPhoto } from '../../utils/photo/uploaded-photo';
-import { parseAndValidate } from '../../middleware/validate';
-import { AppError } from '../../utils/error/app-error';
-import { ShopService } from '../shop/shop.service';
-import { AdminCreateRatingRequest } from '../rating/dto/admin-create-rating-request.dto';
-import { UpdateRatingRequest } from '../rating/dto/update-rating-request.dto';
-import { RatingService } from '../rating/rating.service';
+import { asyncHandler } from '../../shared/middleware/async-handler';
+import { optionalPhotoUpload } from '../../shared/middleware/optional-photo-upload';
+import { toUploadedPhoto } from '../../shared/utils/photo/uploaded-photo';
+import { parseAndValidate } from '../../shared/middleware/validate';
+import { AppError } from '../../shared/utils/error/app-error';
+import { ShopService } from '../shop';
+import { AdminCreateRatingRequest, RatingService, UpdateRatingRequest } from '../rating';
 import { buildPaginationVm } from './pagination-vm';
 import { flattenErrorMessages } from './flatten-error-messages';
 import { flash } from './flash';
@@ -79,7 +77,6 @@ export function registerAdminRatingRoutes(
       try {
         const dto = await parseAndValidate(AdminCreateRatingRequest, req.body);
         const rating = await ratings.createAsAdmin(dto, toUploadedPhoto(req.file));
-        if (rating.isValidated) await shops.recomputeAggregates(rating.shopId);
         flash(req, 'success', 'Rating created.');
         res.redirect(`/admin/shops/${rating.shopId}`);
       } catch (error) {
@@ -135,11 +132,10 @@ export function registerAdminRatingRoutes(
       try {
         const dto = await parseAndValidate(UpdateRatingRequest, req.body);
         const removePhoto = req.body.removePhoto === 'on' || req.body.removePhoto === 'true';
-        const rating = await ratings.update(req.params.id, dto, {
+        await ratings.update(req.params.id, dto, {
           photo: toUploadedPhoto(req.file),
           removePhoto,
         });
-        await shops.recomputeAggregates(rating.shopId);
         flash(req, 'success', 'Rating updated and shop aggregates recomputed.');
         res.redirect(safeRedirectPath(req.body?.redirectTo, '/admin/ratings'));
       } catch (error) {
@@ -172,8 +168,7 @@ export function registerAdminRatingRoutes(
 
   const setRatingValidation = (isValidated: boolean) => {
     return asyncHandler(async (req: Request, res: Response) => {
-      const rating = await ratings.setValidated(req.params.id, isValidated);
-      await shops.recomputeAggregates(rating.shopId);
+      await ratings.setValidated(req.params.id, isValidated);
       flash(
         req,
         'success',
@@ -189,9 +184,7 @@ export function registerAdminRatingRoutes(
     '/ratings/:id/delete',
     verifyCsrf,
     asyncHandler(async (req: Request, res: Response) => {
-      const rating = await ratings.getById(req.params.id);
-      await ratings.remove(rating.id);
-      await shops.recomputeAggregates(rating.shopId);
+      await ratings.remove(req.params.id);
       flash(req, 'success', 'Rating deleted and shop aggregates recomputed.');
       res.redirect(safeRedirectPath(req.body?.redirectTo, '/admin/ratings'));
     }),

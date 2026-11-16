@@ -3,11 +3,9 @@ import {
   CreateDateColumn,
   Entity,
   Index,
-  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Rating } from './rating.entity';
 
 @Entity({ name: 'shop_table' })
 @Index('idx_shop_table_is_validated', ['isValidated'])
@@ -50,7 +48,4 @@ export class Shop {
 
   @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' })
   updatedAt!: Date;
-
-  @OneToMany(() => Rating, (rating) => rating.shop)
-  ratings!: Rating[];
 }

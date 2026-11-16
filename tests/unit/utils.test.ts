@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { parsePagination } from '../../src/utils/pagination/parse-pagination';
-import { safeEqual, randomToken } from '../../src/utils/math/crypto';
-import { isAllowedImageMime } from '../../src/utils/photo/is-allowed-image-mime';
-import { isUuid } from '../../src/utils/string/uuid';
+import { parsePagination } from '../../src/shared/utils/pagination/parse-pagination';
+import { safeEqual, randomToken } from '../../src/shared/utils/math/crypto';
+import { isAllowedImageMime } from '../../src/shared/utils/photo/is-allowed-image-mime';
+import { isUuid } from '../../src/shared/utils/string/uuid';
 
 describe('parsePagination', () => {
   it('falls back to defaults for missing input', () => {

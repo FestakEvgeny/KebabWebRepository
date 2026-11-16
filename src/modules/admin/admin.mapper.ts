@@ -1,7 +1,5 @@
-import { Shop } from '../../database/entities/shop.entity';
-import { Rating } from '../../database/entities/rating.entity';
-import { toShopResponse } from '../shop/shop.mapper';
-import { toRatingResponse } from '../rating/rating.mapper';
+import { Shop, toShopResponse } from '../shop';
+import { Rating, toRatingResponse } from '../rating';
 
 /**
  * Admin view models. Unlike the public API mappers, these expose the

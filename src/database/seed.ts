@@ -1,11 +1,9 @@
 import 'reflect-metadata';
-import * as bcrypt from 'bcryptjs';
 import { createDataSource } from './data-source';
-import { env } from '../config/env';
-import { AdminUser } from './entities/admin-user.entity';
-import { Rating } from './entities/rating.entity';
-import { Shop } from './entities/shop.entity';
-import { ShopService } from '../modules/shop/shop.service';
+import { env } from '../shared/config/env';
+import { AdminAuthService } from '../modules/admin';
+import { RatingService } from '../modules/rating';
+import { ShopService } from '../modules/shop';
 
 // A 1x1 pixel PNG used as a sample shop photo.
 const SAMPLE_PNG_BASE64 =
@@ -16,30 +14,19 @@ async function main(): Promise<void> {
   await dataSource.initialize();
 
   try {
-    const adminRepo = dataSource.getRepository(AdminUser);
+    const adminAuth = new AdminAuthService(dataSource);
     const email = env.ADMIN_EMAIL.trim().toLowerCase();
-    const existing = await adminRepo.findOneBy({ email });
-    if (existing) {
-      console.log(`[kebab-guide] Admin user already exists: ${email}`);
-    } else {
-      await adminRepo.save(
-        adminRepo.create({
-          email,
-          passwordHash: await bcrypt.hash(env.ADMIN_PASSWORD, 12),
-        }),
-      );
+    const created = await adminAuth.ensureAdminUser(email, env.ADMIN_PASSWORD);
+    if (created) {
       console.log(`[kebab-guide] Admin user created: ${email} (password from ADMIN_PASSWORD)`);
+    } else {
+      console.log(`[kebab-guide] Admin user already exists: ${email}`);
     }
 
-    const shopRepo = dataSource.getRepository(Shop);
-    const shopCount = await shopRepo.count();
-    if (env.SEED_SAMPLE_DATA && shopCount === 0) {
+    if (env.SEED_SAMPLE_DATA) {
       await seedSampleData(dataSource);
-      console.log('[kebab-guide] Sample shops and ratings inserted.');
-    } else if (!env.SEED_SAMPLE_DATA) {
-      console.log('[kebab-guide] SEED_SAMPLE_DATA is off - skipping sample data.');
     } else {
-      console.log('[kebab-guide] Shops already present - skipping sample data.');
+      console.log('[kebab-guide] SEED_SAMPLE_DATA is off - skipping sample data.');
     }
   } finally {
     await dataSource.destroy();
@@ -47,78 +34,72 @@ async function main(): Promise<void> {
 }
 
 async function seedSampleData(dataSource: Awaited<ReturnType<typeof createDataSource>>) {
-  const shopRepo = dataSource.getRepository(Shop);
-  const shopService = new ShopService(dataSource);
+  // The seed only creates shops and ratings, never reads detail pages, so the
+  // ratings-reader port can stay empty.
+  const shops = new ShopService(dataSource, { listValidatedByShop: async () => [] });
+  const ratings = new RatingService(dataSource, shops);
 
-  const [kebabKing, donerDream, adanaGrill] = await shopRepo.save([
-    shopRepo.create({
-      name: 'Kebab King',
-      latitude: 52.52,
-      longitude: 13.405,
-      isValidated: true,
-      photo: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
-      photoMimeType: 'image/png',
-    }),
-    shopRepo.create({
-      name: 'Doner Dream',
-      latitude: 52.535,
-      longitude: 13.425,
-      isValidated: true,
-    }),
-    shopRepo.create({
-      name: 'Adana Grill House',
-      latitude: 52.51,
-      longitude: 13.36,
-      isValidated: false,
-    }),
-  ]);
-
-  const ratingRepo = dataSource.getRepository(Rating);
-  await ratingRepo.save([
-    {
-      shopId: kebabKing.id,
-      foodQualityRating: 5,
-      priceFairRating: 4,
-      interiorRating: 4,
-      notes: 'Generous portions and friendly staff.',
-      isValidated: true,
-    },
-    {
-      shopId: kebabKing.id,
-      foodQualityRating: 4,
-      priceFairRating: 5,
-      interiorRating: 3,
-      notes: null,
-      isValidated: true,
-    },
-    {
-      shopId: kebabKing.id,
-      foodQualityRating: 2,
-      priceFairRating: 2,
-      interiorRating: 2,
-      notes: 'Waiting for moderation.',
-      isValidated: false,
-    },
-    {
-      shopId: donerDream.id,
-      foodQualityRating: 5,
-      priceFairRating: 5,
-      interiorRating: 4,
-      notes: 'Best flatbread in town.',
-      isValidated: true,
-    },
-    {
-      shopId: adanaGrill.id,
-      foodQualityRating: 4,
-      priceFairRating: 3,
-      interiorRating: 4,
-      notes: null,
-      isValidated: false,
-    },
-  ]);
-  for (const shop of [kebabKing, donerDream]) {
-    await shopService.recomputeAggregates(shop.id);
+  const existingShops = await shops.list({ page: 1, limit: 1, isValidated: undefined });
+  if (existingShops.pagination.total > 0) {
+    console.log('[kebab-guide] Shops already present - skipping sample data.');
+    return;
   }
+
+  const kebabKing = await shops.create(
+    { name: 'Kebab King', latitude: 52.52, longitude: 13.405 },
+    {
+      buffer: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
+      mimeType: 'image/png',
+      size: 82,
+    },
+  );
+  const donerDream = await shops.create({ name: 'Doner Dream', latitude: 52.535, longitude: 13.425 });
+  const adanaGrill = await shops.create({ name: 'Adana Grill House', latitude: 52.51, longitude: 13.36 });
+  await shops.setValidated(kebabKing.id, true);
+  await shops.setValidated(donerDream.id, true);
+
+  await ratings.createAsAdmin({
+    shopId: kebabKing.id,
+    foodQualityRating: 5,
+    priceFairRating: 4,
+    interiorRating: 4,
+    notes: 'Generous portions and friendly staff.',
+    isValidated: true,
+  });
+  await ratings.createAsAdmin({
+    shopId: kebabKing.id,
+    foodQualityRating: 4,
+    priceFairRating: 5,
+    interiorRating: 3,
+    notes: null,
+    isValidated: true,
+  });
+  await ratings.createAsAdmin({
+    shopId: kebabKing.id,
+    foodQualityRating: 2,
+    priceFairRating: 2,
+    interiorRating: 2,
+    notes: 'Waiting for moderation.',
+    isValidated: false,
+  });
+  await ratings.createAsAdmin({
+    shopId: donerDream.id,
+    foodQualityRating: 5,
+    priceFairRating: 5,
+    interiorRating: 4,
+    notes: 'Best flatbread in town.',
+    isValidated: true,
+  });
+  await ratings.createAsAdmin({
+    shopId: adanaGrill.id,
+    foodQualityRating: 4,
+    priceFairRating: 3,
+    interiorRating: 4,
+    notes: null,
+    isValidated: false,
+  });
+
+  console.log('[kebab-guide] Sample shops and ratings inserted.');
 }
 
 main().catch((error: unknown) => {

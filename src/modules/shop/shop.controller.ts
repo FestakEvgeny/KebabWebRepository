@@ -1,10 +1,11 @@
+import { Inject, Injectable } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { asyncHandler } from '../../middleware/async-handler';
-import { toUploadedPhoto } from '../../utils/photo/uploaded-photo';
-import { AppError } from '../../utils/error/app-error';
-import { requireUuid } from '../../utils/string/uuid';
-import { sendPhoto } from '../../utils/photo/send-photo';
-import { parseAndValidate } from '../../middleware/validate';
+import { asyncHandler } from '../../shared/middleware/async-handler';
+import { toUploadedPhoto } from '../../shared/utils/photo/uploaded-photo';
+import { AppError } from '../../shared/utils/error/app-error';
+import { requireUuid } from '../../shared/utils/string/uuid';
+import { sendPhoto } from '../../shared/utils/photo/send-photo';
+import { parseAndValidate } from '../../shared/middleware/validate';
 import { CreateShopRequest } from './dto/create-shop-request.dto';
 import { ListShopsQuery } from './dto/list-shops-query.dto';
 import { ShopService } from './shop.service';
@@ -15,8 +16,10 @@ import { toShopDetailResponse, toShopResponse } from './shop.mapper';
  * Routers own middleware and paths; this class owns request parsing and
  * response shapes only.
  */
+@Injectable()
 export class ShopController {
-  constructor(private readonly shops: ShopService) {}
+  // Tokens are declared explicitly so DI works under the esbuild dev runner.
+  constructor(@Inject(ShopService) private readonly shops: ShopService) {}
 
   /** POST /shops — public submission, always stored as pending. */
   create = asyncHandler(async (req: Request, res: Response) => {
@@ -52,8 +55,8 @@ export class ShopController {
   /** GET /shops/:id — shop detail including its validated ratings. */
   getDetail = asyncHandler(async (req: Request, res: Response) => {
     requireUuid(req.params.id, 'Shop');
-    const shop = await this.shops.getByIdWithRatings(req.params.id);
-    res.json({ data: toShopDetailResponse(shop) });
+    const { shop, ratings } = await this.shops.getByIdWithRatings(req.params.id);
+    res.json({ data: toShopDetailResponse(shop, ratings) });
   });
 
   /** GET /shops/:id/photo — the photo bytes, 404 when the shop has none. */

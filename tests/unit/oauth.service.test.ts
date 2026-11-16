@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as bcrypt from 'bcryptjs';
 import { DataSource } from 'typeorm';
-import { env } from '../../src/config/env';
-import { AuthToken } from '../../src/database/entities/auth-token.entity';
-import { User } from '../../src/database/entities/user.entity';
+import { env } from '../../src/shared/config/env';
+import { AuthToken } from '../../src/modules/oauth/auth-token.entity';
+import { User } from '../../src/modules/oauth/user.entity';
 import { OAuthService } from '../../src/modules/oauth/oauth.service';
 
 function createFakeRepo(overrides: Record<string, unknown> = {}): Record<string, unknown> {

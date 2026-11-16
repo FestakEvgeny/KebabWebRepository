@@ -1,9 +1,9 @@
-import { DataSource } from 'typeorm';
-import { RatingService } from '../rating/rating.service';
-import { ShopService } from '../shop/shop.service';
+import { ShopService } from '../shop';
+import { RatingService } from '../rating';
+import { AdminAuthService } from './admin-auth.service';
 
 export interface AdminRouterDeps {
-  dataSource: DataSource;
+  adminAuth: AdminAuthService;
   shopService: ShopService;
   ratingService: RatingService;
 }

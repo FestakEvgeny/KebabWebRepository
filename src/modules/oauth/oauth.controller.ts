@@ -1,8 +1,9 @@
+import { Inject, Injectable } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { asyncHandler } from '../../middleware/async-handler';
-import { extractBearerToken } from '../../utils/string/extract-bearer-token';
-import { parseAndValidate } from '../../middleware/validate';
-import { AppError } from '../../utils/error/app-error';
+import { asyncHandler } from '../../shared/middleware/async-handler';
+import { extractBearerToken } from '../../shared/utils/string/extract-bearer-token';
+import { parseAndValidate } from '../../shared/middleware/validate';
+import { AppError } from '../../shared/utils/error/app-error';
 import { LoginRequest } from './dto/login-request.dto';
 import { RegisterRequest } from './dto/register-request.dto';
 import { RefreshTokenRequest } from './dto/refresh-token-request.dto';
@@ -14,8 +15,10 @@ import { OAuthService } from './oauth.service';
  * token issuing/refreshing plus register/login/logout. Routers own middleware
  * and paths; this class owns request parsing and response shapes only.
  */
+@Injectable()
 export class OAuthController {
-  constructor(private readonly oauth: OAuthService) {}
+  // Tokens are declared explicitly so DI works under the esbuild dev runner.
+  constructor(@Inject(OAuthService) private readonly oauth: OAuthService) {}
 
   /** GET /oauth/token */
   issue = asyncHandler(async (_req: Request, res: Response) => {

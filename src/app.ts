@@ -1,30 +1,35 @@
+import { NestFactory } from '@nestjs/core';
 import 'reflect-metadata';
 import path from 'node:path';
 import connectPgSimple from 'connect-pg-simple';
 import cors from 'cors';
-import express, { Express } from 'express';
+import express, { Express, RequestHandler, Router } from 'express';
 import session from 'express-session';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { DataSource } from 'typeorm';
-import { env, isDevelopment } from './config/env';
+import { env, isDevelopment } from './shared/config/env';
+import { AppModule } from './app.module';
 import { createApiV1Router } from './api/v1.router';
-import { createHealthRouter } from './modules/health/health.routes';
-import { createAdminRouter } from './modules/admin/admin.routes';
-import { ShopService } from './modules/shop/shop.service';
-import { RatingService } from './modules/rating/rating.service';
-import { OAuthService } from './modules/oauth/oauth.service';
-import { errorHandler } from './middleware/error-handler';
-import { notFoundHandler } from './middleware/not-found-handler';
+import { createHealthRouter } from './modules/health';
+import { ADMIN_ROUTER } from './modules/admin';
+import { AUTHENTICATE, OAUTH_ROUTER } from './modules/oauth';
+import { RATINGS_NESTED_ROUTER, RATINGS_ROOT_ROUTER } from './modules/rating';
+import { SHOP_ROUTER } from './modules/shop';
+import { errorHandler } from './shared/middleware/error-handler';
+import { notFoundHandler } from './shared/middleware/not-found-handler';
 
-export function createApp(dataSource: DataSource): Express {
+export async function createApp(dataSource: DataSource): Promise<Express> {
+  // Composition root: boot the Nest DI container (standalone context, no HTTP
+  // adapter) and mount the routers it produces onto Express. The shop detail
+  // endpoint needs rating summaries and the rating module needs the shop
+  // gateway, so the shop/rating module pair is wired through Nest's
+  // forwardRef — see their *.module.ts files.
+  const container = await NestFactory.createApplicationContext(AppModule.forRoot(dataSource), {
+    logger: false,
+  });
+
   const app = express();
-
-  // Composition root: one service instance per app, shared by the public API
-  // and the admin panel.
-  const shopService = new ShopService(dataSource);
-  const ratingService = new RatingService(dataSource);
-  const oauthService = new OAuthService(dataSource);
 
   app.disable('x-powered-by');
   app.set('json escape', true);
@@ -94,9 +99,18 @@ export function createApp(dataSource: DataSource): Express {
   );
   app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
-  app.use('/health', createHealthRouter(dataSource));
-  app.use('/api/v1', createApiV1Router({ shopService, ratingService, oauthService }));
-  app.use('/admin', createAdminRouter({ dataSource, shopService, ratingService }));
+  app.use('/health', createHealthRouter(container.get(DataSource)));
+  app.use(
+    '/api/v1',
+    createApiV1Router({
+      authenticate: container.get<RequestHandler>(AUTHENTICATE),
+      oauthRouter: container.get<Router>(OAUTH_ROUTER),
+      shopsRouter: container.get<Router>(SHOP_ROUTER),
+      ratingsNestedRouter: container.get<Router>(RATINGS_NESTED_ROUTER),
+      ratingsRootRouter: container.get<Router>(RATINGS_ROOT_ROUTER),
+    }),
+  );
+  app.use('/admin', container.get<Router>(ADMIN_ROUTER));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

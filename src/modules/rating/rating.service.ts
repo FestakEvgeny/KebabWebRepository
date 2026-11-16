@@ -1,19 +1,23 @@
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
-import { Rating } from '../../database/entities/rating.entity';
-import { Shop } from '../../database/entities/shop.entity';
+import { Rating } from './rating.entity';
 import { CreateRatingRequest } from './dto/create-rating-request.dto';
 import { AdminCreateRatingRequest } from './dto/admin-create-rating-request.dto';
 import { UpdateRatingRequest } from './dto/update-rating-request.dto';
-import { PaginatedList } from '../../utils/pagination/paginated-list';
+import { PaginatedList } from '../../shared/utils/pagination/paginated-list';
 import { ListRatingsOptions } from './list-ratings-options';
 import { AdminRatingListFilters } from './admin-rating-list-filters';
 import { AdminRatingListItem } from './admin-rating-list-item';
-import { UploadedPhoto } from '../../utils/photo/uploaded-photo';
-import { PhotoUpdate } from '../../utils/photo/photo-update';
-import { AppError } from '../../utils/error/app-error';
-import { parsePagination } from '../../utils/pagination/parse-pagination';
-import { paginationMeta } from '../../utils/pagination/pagination-meta';
-import { escapeLike } from '../../utils/string/escape-like';
+import { RatingStats } from './rating-stats';
+import { ShopGateway } from './shop-gateway';
+import { ShopRatingSummary, ShopService } from '../shop';
+import { UploadedPhoto } from '../../shared/utils/photo/uploaded-photo';
+import { PhotoUpdate } from '../../shared/utils/photo/photo-update';
+import { AppError } from '../../shared/utils/error/app-error';
+import { parsePagination } from '../../shared/utils/pagination/parse-pagination';
+import { paginationMeta } from '../../shared/utils/pagination/pagination-meta';
+import { escapeLike } from '../../shared/utils/string/escape-like';
+import { toRatingResponse } from './rating.mapper';
 
 const RATING_LIST_COLUMNS = [
   'rating.id',
@@ -33,13 +37,19 @@ function normalizeNotes(notes?: string | null): string | null {
   return trimmed ? trimmed : null;
 }
 
+@Injectable()
 export class RatingService {
   private readonly repo: Repository<Rating>;
-  private readonly shopRepo: Repository<Shop>;
 
-  constructor(private readonly ds: DataSource) {
+  constructor(
+    // Tokens are declared explicitly (instead of relying on reflected
+    // paramtypes) so the DI graph survives the esbuild-based dev runner.
+    @Inject(DataSource) ds: DataSource,
+    // The gateway is the shop module's ShopService; the module pair imports
+    // each other via forwardRef because the shop side reads ratings back.
+    @Inject(forwardRef(() => ShopService)) private readonly shops: ShopGateway,
+  ) {
     this.repo = ds.getRepository(Rating);
-    this.shopRepo = ds.getRepository(Shop);
   }
 
   /** Creates a pending rating via the public API (is_validated always false). */
@@ -48,8 +58,9 @@ export class RatingService {
     dto: CreateRatingRequest,
     photo?: UploadedPhoto,
   ): Promise<Rating> {
-    const shop = await this.shopRepo.findOneBy({ id: shopId });
-    if (!shop) throw AppError.notFound(`Shop with id "${shopId}" was not found.`);
+    if (!(await this.shops.exists(shopId))) {
+      throw AppError.notFound(`Shop with id "${shopId}" was not found.`);
+    }
 
     const rating = this.repo.create({
       shopId,
@@ -64,8 +75,9 @@ export class RatingService {
   }
 
   async createAsAdmin(dto: AdminCreateRatingRequest, photo?: UploadedPhoto): Promise<Rating> {
-    const shop = await this.shopRepo.findOneBy({ id: dto.shopId });
-    if (!shop) throw AppError.notFound(`Shop with id "${dto.shopId}" was not found.`);
+    if (!(await this.shops.exists(dto.shopId))) {
+      throw AppError.notFound(`Shop with id "${dto.shopId}" was not found.`);
+    }
 
     const rating = this.repo.create({
       shopId: dto.shopId,
@@ -76,7 +88,9 @@ export class RatingService {
       isValidated: dto.isValidated,
       ...(photo ? { photo: photo.buffer, photoMimeType: photo.mimeType } : {}),
     });
-    return this.repo.save(rating);
+    const saved = await this.repo.save(rating);
+    if (saved.isValidated) await this.recomputeAggregate(saved.shopId);
+    return saved;
   }
 
   async getById(id: string): Promise<Rating> {
@@ -105,12 +119,23 @@ export class RatingService {
     return { data: ratings, pagination: paginationMeta(page, limit, total) };
   }
 
+  /** Validated ratings for one shop, newest first, in the shop module's summary shape. */
+  async listValidatedSummaries(shopId: string): Promise<ShopRatingSummary[]> {
+    const ratings = await this.repo.find({
+      where: { shopId, isValidated: true },
+      order: { createdAt: 'DESC' },
+    });
+    return ratings.map((rating) => toRatingResponse(rating));
+  }
+
   async listAdmin(filters: AdminRatingListFilters): Promise<PaginatedList<AdminRatingListItem>> {
     const { page, limit, skip } = parsePagination(filters);
     const qb = this.repo
       .createQueryBuilder('rating')
       .select(RATING_LIST_COLUMNS)
-      .leftJoin('rating.shop', 'shop')
+      // Raw join on the shop table: the rating module does not map the shop
+      // entity, it only needs the shop name for the admin listing.
+      .leftJoin('shop_table', 'shop', 'shop.id = rating.shopId')
       .addSelect('shop.name', 'shop_name');
 
     const isValidated =
@@ -174,16 +199,50 @@ export class RatingService {
       rating.photo = null;
       rating.photoMimeType = null;
     }
-    return this.repo.save(rating);
+    const saved = await this.repo.save(rating);
+    await this.recomputeAggregate(saved.shopId);
+    return saved;
   }
 
   async setValidated(id: string, isValidated: boolean): Promise<Rating> {
     const rating = await this.getById(id);
     rating.isValidated = isValidated;
-    return this.repo.save(rating);
+    const saved = await this.repo.save(rating);
+    await this.recomputeAggregate(saved.shopId);
+    return saved;
   }
 
   async remove(id: string): Promise<void> {
+    const rating = await this.getById(id);
     await this.repo.delete(id);
+    await this.recomputeAggregate(rating.shopId);
+  }
+
+  /**
+   * Recomputes the denormalized aggregates for one shop from the shop's
+   * validated ratings and pushes them onto the shop row via the gateway.
+   * Overall score of one rating = mean of its three subscores.
+   */
+  private async recomputeAggregate(shopId: string): Promise<void> {
+    const rows = (await this.repo.query(
+      `SELECT
+         ROUND(AVG((food_quality_rating + price_fair_rating + interior_rating) / 3.0)::numeric, 2) AS avg_rating,
+         COUNT(*)::int AS rating_count
+       FROM rating_table
+       WHERE shop_id = $1 AND is_validated = TRUE`,
+      [shopId],
+    )) as Array<{ avg_rating: string | null; rating_count: number }>;
+    const row = rows[0];
+    await this.shops.applyRatingAggregates(shopId, row.avg_rating ?? null, row.rating_count ?? 0);
+  }
+
+  async stats(): Promise<RatingStats> {
+    const rows = (await this.repo.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM rating_table) AS total_ratings,
+         (SELECT COUNT(*)::int FROM rating_table WHERE is_validated = FALSE) AS pending_ratings`,
+    )) as Array<{ total_ratings: number; pending_ratings: number }>;
+    const row = rows[0];
+    return { totalRatings: row.total_ratings, pendingRatings: row.pending_ratings };
   }
 }

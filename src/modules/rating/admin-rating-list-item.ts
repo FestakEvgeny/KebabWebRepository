@@ -1,4 +1,4 @@
-import { Rating } from '../../database/entities/rating.entity';
+import { Rating } from './rating.entity';
 
 export interface AdminRatingListItem {
   rating: Rating;

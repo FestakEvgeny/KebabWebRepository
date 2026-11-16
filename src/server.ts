@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { createApp } from './app';
 import { createDataSource } from './database/data-source';
-import { env } from './config/env';
+import { env } from './shared/config/env';
 
 async function connectWithRetry(
   create: () => DataSource,
@@ -33,7 +33,7 @@ async function main(): Promise<void> {
   console.log(`[kebab-guide] Starting in ${env.NODE_ENV} mode...`);
   const dataSource = await connectWithRetry(() => createDataSource());
 
-  const app = createApp(dataSource);
+  const app = await createApp(dataSource);
   const server = app.listen(env.PORT, () => {
     console.log(`[kebab-guide] API        http://localhost:${env.PORT}/api/v1`);
     console.log(`[kebab-guide] Admin      http://localhost:${env.PORT}/admin`);

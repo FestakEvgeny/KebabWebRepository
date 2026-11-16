@@ -1,19 +1,20 @@
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
-import { Shop } from '../../database/entities/shop.entity';
-import { Rating } from '../../database/entities/rating.entity';
+import { Shop } from './shop.entity';
 import { CreateShopRequest } from './dto/create-shop-request.dto';
 import { UpdateShopRequest } from './dto/update-shop-request.dto';
-import { PaginatedList } from '../../utils/pagination/paginated-list';
+import { PaginatedList } from '../../shared/utils/pagination/paginated-list';
 import { ShopListFilters } from './shop-list-filters';
 import { ShopListItem } from './shop-list-item';
 import { ShopStats } from './shop-stats';
-import { UploadedPhoto } from '../../utils/photo/uploaded-photo';
-import { PhotoUpdate } from '../../utils/photo/photo-update';
-import { AppError } from '../../utils/error/app-error';
-import { parsePagination } from '../../utils/pagination/parse-pagination';
-import { paginationMeta } from '../../utils/pagination/pagination-meta';
-import { round2 } from '../../utils/math/math';
-import { escapeLike } from '../../utils/string/escape-like';
+import { ShopRatingsReader, ShopRatingSummary, SHOP_RATINGS_READER } from './shop-rating-reader';
+import { UploadedPhoto } from '../../shared/utils/photo/uploaded-photo';
+import { PhotoUpdate } from '../../shared/utils/photo/photo-update';
+import { AppError } from '../../shared/utils/error/app-error';
+import { parsePagination } from '../../shared/utils/pagination/parse-pagination';
+import { paginationMeta } from '../../shared/utils/pagination/pagination-meta';
+import { round2 } from '../../shared/utils/math/math';
+import { escapeLike } from '../../shared/utils/string/escape-like';
 
 /** Columns loaded for list queries; photo blobs are excluded to keep pages light. */
 const SHOP_LIST_COLUMNS = [
@@ -31,11 +32,26 @@ const SHOP_LIST_COLUMNS = [
 
 const EARTH_RADIUS_KM = 6371;
 
+@Injectable()
 export class ShopService {
   private readonly repo: Repository<Shop>;
 
-  constructor(private readonly ds: DataSource) {
+  constructor(
+    // Tokens are declared explicitly (instead of relying on reflected
+    // paramtypes) so the DI graph survives the esbuild-based dev runner.
+    @Inject(DataSource) ds: DataSource,
+    // The reader is implemented by the rating module, whose service needs the
+    // shop gateway in return; forwardRef keeps that mutual wiring resolvable.
+    @Inject(forwardRef(() => SHOP_RATINGS_READER))
+    private readonly ratingsReader: ShopRatingsReader,
+  ) {
     this.repo = ds.getRepository(Shop);
+  }
+
+  /** Existence check exposed to the rating module via its ShopGateway port. */
+  async exists(id: string): Promise<boolean> {
+    const count = await this.repo.count({ where: { id } });
+    return count > 0;
   }
 
   async create(dto: CreateShopRequest, photo?: UploadedPhoto): Promise<Shop> {
@@ -64,13 +80,10 @@ export class ShopService {
     return shop;
   }
 
-  async getByIdWithRatings(id: string): Promise<Shop> {
+  async getByIdWithRatings(id: string): Promise<{ shop: Shop; ratings: ShopRatingSummary[] }> {
     const shop = await this.getById(id);
-    shop.ratings = await this.ds.getRepository(Rating).find({
-      where: { shopId: id, isValidated: true },
-      order: { createdAt: 'DESC' },
-    });
-    return shop;
+    const ratings = await this.ratingsReader.listValidatedByShop(id);
+    return { shop, ratings };
   }
 
   async list(filters: ShopListFilters): Promise<PaginatedList<ShopListItem>> {
@@ -153,24 +166,20 @@ export class ShopService {
   }
 
   /**
-   * Recomputes shop.rating and shop.count_of_rates from the shop's validated
-   * ratings. Overall score of one rating = mean of its three subscores.
+   * Stores the rating-derived aggregates on the shop row. The rating module
+   * computes the values from its own data and calls this through its
+   * ShopGateway port — the source of truth never leaves the rating module.
    */
-  async recomputeAggregates(shopId: string): Promise<void> {
+  async applyRatingAggregates(
+    shopId: string,
+    rating: string | null,
+    countOfRates: number,
+  ): Promise<void> {
     await this.repo.query(
-      `UPDATE shop_table s
-       SET rating = agg.avg_rating,
-           count_of_rates = agg.rating_count,
-           updated_at = now()
-       FROM (
-         SELECT
-           ROUND(AVG((r.food_quality_rating + r.price_fair_rating + r.interior_rating) / 3.0)::numeric, 2) AS avg_rating,
-           COUNT(*)::int AS rating_count
-         FROM rating_table r
-         WHERE r.shop_id = $1 AND r.is_validated = TRUE
-       ) agg
-       WHERE s.id = $1`,
-      [shopId],
+      `UPDATE shop_table
+       SET rating = $2, count_of_rates = $3, updated_at = now()
+       WHERE id = $1`,
+      [shopId, rating, countOfRates],
     );
   }
 
@@ -178,22 +187,10 @@ export class ShopService {
     const rows = (await this.repo.query(
       `SELECT
          (SELECT COUNT(*)::int FROM shop_table) AS total_shops,
-         (SELECT COUNT(*)::int FROM shop_table WHERE is_validated = FALSE) AS pending_shops,
-         (SELECT COUNT(*)::int FROM rating_table) AS total_ratings,
-         (SELECT COUNT(*)::int FROM rating_table WHERE is_validated = FALSE) AS pending_ratings`,
-    )) as Array<{
-      total_shops: number;
-      pending_shops: number;
-      total_ratings: number;
-      pending_ratings: number;
-    }>;
+         (SELECT COUNT(*)::int FROM shop_table WHERE is_validated = FALSE) AS pending_shops`,
+    )) as Array<{ total_shops: number; pending_shops: number }>;
     const row = rows[0];
-    return {
-      totalShops: row.total_shops,
-      pendingShops: row.pending_shops,
-      totalRatings: row.total_ratings,
-      pendingRatings: row.pending_ratings,
-    };
+    return { totalShops: row.total_shops, pendingShops: row.pending_shops };
   }
 }
 

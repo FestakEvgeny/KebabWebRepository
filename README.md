@@ -10,44 +10,96 @@ admin panel for content moderation (validating shops and user ratings).
 - **Validation:** class-validator DTOs on every write path + database CHECK constraints
 - **Tooling:** ESLint (typescript-eslint), Prettier, Vitest, helmet, morgan, express-rate-limit
 
-## Project structure
+## Project structure (modular monolith)
 
 ```
-src/                          Backend (Node.js + TypeScript)
-  server.ts                   Entry point (graceful shutdown, DB retry)
-  app.ts                      Express app factory + composition root
-                              (creates services once, wires all routers)
-  config/env.ts               Zod-validated environment configuration
-  api/                        HTTP composition
-    v1.router.ts              Composition root of the public /api/v1 router
-  database/
-    data-source.ts            TypeORM data source (snake_case naming strategy)
-    entities/                 Shop, Rating, AdminUser, AuthToken, User entities
-                              (one class per file)
-    migrations/               SQL migrations (tables, indexes, CHECK constraints)
-    naming-strategy.ts        camelCase property -> snake_case column mapping
-    migrate.ts / seed.ts      Migration CLI and idempotent seed script
-    dev-db.ts                 Dev-only embedded PostgreSQL helper (no Docker needed)
-  middleware/                 Errors, validation, uploads, rate limiting
-  utils/                      Shared helpers & models (one type per file):
-                              AppError, pagination, uuid checks, uploaded photo, ...
-  modules/                    Features (package-by-feature)
-    oauth/                    OAuth token service (access + refresh token pairs),
-                              register/login/logout, token controller & routes,
-                              bearer auth for /api/v1
-    shop/                     Shop service (returns entities), HTTP controller,
-                              routes, public mappers + dto/
-    rating/                   Rating service, HTTP controller (nested + flat
-                              create), public mappers + dto/
-    admin/                    Admin panel (the ONLY place with login/moderation):
-                              session auth, CSRF, admin view mappers, controllers
-    health/                   GET /health
-frontend/                     Admin panel UI (served by the backend)
-  views/                      EJS templates (layout partials, lists, forms)
-  public/                     Admin stylesheet + tiny confirm-delete script
-tests/unit/                   Vitest unit tests (DTOs, services, utils)
-scripts/e2e-smoke.mjs         End-to-end smoke test against a running server
+src/                              Backend (Node.js + TypeScript)
+  server.ts                       Entry point (graceful shutdown, DB retry)
+  app.module.ts                   Root of the DI graph (imports every Nest module)
+  app.ts                          Composition root: boots the DI container
+                                  (Nest standalone context), mounts routers
+  api/                            Public API composition
+    v1.router.ts                  Mounts oauth/shop/rating under /api/v1 and
+                                  the bearer auth gate
+  shared/                         SHARED KERNEL (may never import modules/)
+    config/env.ts                 Zod-validated environment configuration
+    middleware/                   Errors, validation, uploads, rate limiting
+    types/                        Ambient type declarations
+    utils/                        Shared helpers (AppError, pagination,
+                                  photo handling, crypto, string utils, ...)
+  modules/                        Business modules (self-contained features,
+                                  Nest DI wiring in <name>.module.ts)
+    shop/                         Shop entity + service + HTTP layer, the
+                                  ShopRatingsReader port, dto/ + index.ts
+    rating/                       Rating entity + service (owns the shop
+                                  aggregate recompute), ShopGateway port,
+                                  HTTP controller, dto/ + index.ts
+    oauth/                        User/AuthToken entities, token service
+                                  (access + refresh pairs), register/login/
+                                  logout, bearer auth middleware, index.ts
+    admin/                        Admin panel (the ONLY place with login/
+                                  moderation): AdminUser entity, session auth,
+                                  CSRF, view mappers, controllers, index.ts
+    health/                       GET /health
+  database/                       Infrastructure: data-source.ts (assembles
+                                  module entity registries + migrations globs),
+                                  database.module.ts (DI provider),
+                                  naming-strategy.ts, migrate.ts / seed.ts /
+                                  dev-db.ts, migrations/
+frontend/                         Admin panel UI (served by the backend)
+  views/                          EJS templates (layout partials, lists, forms)
+  public/                         Admin stylesheet + tiny confirm-delete script
+tests/unit/                       Vitest unit tests (DTOs, services, utils)
+scripts/e2e-smoke.mjs             End-to-end smoke test against a running server
 ```
+
+### Module boundaries
+
+Each module in `src/modules/<name>/` is self-contained: it owns its entities,
+service, HTTP layer and its database schema (entity classes + future
+migrations in `modules/<name>/migrations/`, assembled by `database/data-source.ts`).
+The rest of the app may only use a module through its **public API**
+(`src/modules/<name>/index.ts`), which exposes its Nest module class
+(`<Name>Module`), its service(s), DI tokens, entities and port types.
+Internals are not importable from other modules — `eslint-plugin-boundaries`
+enforces this (`npm run lint`).
+
+Dependency injection uses the NestJS IoC container
+(`@nestjs/common` + `@nestjs/core`): services and controllers are
+`@Injectable()`, each module wires its providers (including its Express
+router) in `<name>.module.ts`, and `app.ts` boots the container with
+`NestFactory.createApplicationContext` and mounts the routers it resolves.
+
+Allowed dependency directions:
+
+```
+composition (app.ts, server.ts, api/, database/)  ->  any module public API
+modules                                           ->  shared/
+rating                                            ->  shop (public API only)
+admin                                             ->  shop + rating (public API only)
+shop (Nest wiring in shop.module.ts only)         ->  rating (public API only)
+oauth, health                                     ->  (no module dependencies)
+shared                                            ->  (nothing module-related)
+```
+
+Cross-module data access goes through consumer-owned ports, wired by the DI
+container:
+
+- **rating → shop** (`ShopGateway`): rating asks the shop module whether a
+  shop exists and pushes the recomputed rating aggregates
+  (`applyRatingAggregates`) onto the shop row. The rating module owns the
+  rating data and computes the averages; the shop module only stores them.
+- **shop → ratings** (`ShopRatingsReader`): the shop detail response embeds
+  validated ratings via this port, implemented by the rating module. The two
+  ports together keep the *services* one-way (rating → shop); on the DI
+  graph level the two modules form a `forwardRef` pair
+  (`ShopModule` ⇄ `RatingModule`): `RatingModule` publishes the
+  `SHOP_RATINGS_READER` provider (an adapter over its service) and
+  `RatingService` receives the shop module's `ShopService` as its gateway.
+
+Modules reference each other by ID only: `Rating` stores a plain `shopId`
+column (the `ON DELETE CASCADE` foreign key lives in the SQL migration), and
+there are no cross-module TypeORM relations.
 
 ### Layering rules (who is allowed to see what)
 

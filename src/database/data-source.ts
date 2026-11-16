@@ -1,15 +1,15 @@
 import path from 'node:path';
 import { DataSource } from 'typeorm';
-import { env } from '../config/env';
+import { env } from '../shared/config/env';
 import { CreateDataSourceOptions } from './create-data-source-options';
-import { AdminUser } from './entities/admin-user.entity';
-import { AuthToken } from './entities/auth-token.entity';
-import { Rating } from './entities/rating.entity';
-import { Shop } from './entities/shop.entity';
-import { User } from './entities/user.entity';
+import { adminEntities } from '../modules/admin';
+import { oauthEntities } from '../modules/oauth';
+import { ratingEntities } from '../modules/rating';
+import { shopEntities } from '../modules/shop';
 import { SnakeNamingStrategy } from './naming-strategy';
 
-export const entities = [Shop, Rating, AdminUser, AuthToken, User];
+// Each module owns its entities; the database layer only assembles them.
+export const entities = [...shopEntities, ...ratingEntities, ...oauthEntities, ...adminEntities];
 
 export function createDataSource(options: CreateDataSourceOptions = {}): DataSource {
   return new DataSource({
@@ -17,7 +17,11 @@ export function createDataSource(options: CreateDataSourceOptions = {}): DataSou
     url: env.DATABASE_URL,
     entities,
     namingStrategy: new SnakeNamingStrategy(),
-    migrations: [path.join(__dirname, 'migrations', '*{.ts,.js}')],
+    migrations: [
+      path.join(__dirname, 'migrations', '*{.ts,.js}'),
+      // Module-owned migrations live next to their module: src/modules/<name>/migrations.
+      path.join(__dirname, '..', 'modules', '*', 'migrations', '*{.ts,.js}'),
+    ],
     synchronize: false,
     logging: env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
     migrationsRun: options.migrationsRun ?? env.RUN_MIGRATIONS_ON_START,
